@@ -1,3 +1,14 @@
+/****************************************************** 
+* Copyright (c):   2014, All Rights Reserved. 
+* Project:         CS 116B Homework #2
+* File:            main.cpp 
+* Purpose:         Experiment with quadrics, fractals and SDL.
+* Start date:      2/23/14 
+* Programmer:      Zane Melcho, Jason Hungerford, Cesar Iñarrea
+* 
+****************************************************** 
+*/
+
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <GL/glew.h>
@@ -5,16 +16,83 @@
 #include <cstdlib>
 #include <iostream>
 
-int g_windowWidth = 640;
-int g_windowHeight = 480;
+// Constants
+const int G_WINDOW_WIDTH = 640;
+const int G_WINDOW_HEIGHT = 480;
 
+// Global variables
 bool shouldExit = false;
+unsigned char kbPrevState[SDL_NUM_SCANCODES] = {0};
+const unsigned char* kbState = NULL;
+SDL_Window* window
 
 using namespace std;
 
 // Forward declarations
-static void clearBackground();
 
+/*-----------------------------------------------*/
+static void clearBackground()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	float r,g,b;
+	r = 0;
+	g = 0;
+	b = 0;
+	glClearColor(r,g,b,1);
+	glClear(GL_COLOR_BUFFER_BIT);
+}
+/*-----------------------------------------------*/
+static void keyboard()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	if (kbState[ SDL_SCANCODE_L ])
+	{
+	}
+	else if (kbState[ SDL_SCANCODE_R ])
+	{
+	}
+	else if (kbState[ SDL_SCANCODE_O ])
+	{
+	}
+	else if (kbState[ SDL_SCANCODE_P ])
+	{
+	}
+}
+/*-----------------------------------------------*/
+static void onRender()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	clearBackground();
+	// All draw calls go here
+
+
+	SDL_GL_SwapWindow(window);
+}
+/*-----------------------------------------------*/
 int main( void )
 {	
 	// Initialize SDL
@@ -26,10 +104,10 @@ int main( void )
 	// Create the window, OpenGL context
 	SDL_GL_SetAttribute( SDL_GL_BUFFER_SIZE, 32 );
 	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
-	SDL_Window* window = SDL_CreateWindow(
+	window = SDL_CreateWindow(
 	"SDL Test",
 	SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-	g_windowHeight, g_windowHeight,
+	G_WINDOW_WIDTH, G_WINDOW_HEIGHT,
 	SDL_WINDOW_OPENGL);
 	glCullFace( GL_BACK );
 
@@ -55,10 +133,13 @@ int main( void )
 	}
 
 	// Setup calls
-	
+	kbState = SDL_GetKeyboardState( NULL );
+
 	// The game loop
 	while( !shouldExit ) 
 	{
+		memcpy (kbPrevState, kbState, sizeof( kbPrevState ));
+
 		// Handle OS message pump
 		SDL_Event event;
 		while( SDL_PollEvent( &event )) 
@@ -71,24 +152,38 @@ int main( void )
 		}
 
 		// Logic goes here
-		
-		clearBackground();
-		// All calls to glDraw go here
+		keyboard();
 
-		//===========================
-		SDL_GL_SwapWindow( window );
+		onRender();
 	}
 
 	SDL_Quit();
 	return 0;
 }
 
-static void clearBackground()
-{
-	float r,g,b;
-	r = 0;
-	g = 0;
-	b = 0;
-	glClearColor(r,g,b,1);
-	glClear(GL_COLOR_BUFFER_BIT);
-}
+//Coding Guidelines template (REMOVE before Submission)
+
+/****************************************************** 
+* Copyright (c):   1994, All Rights Reserved. 
+* Project:         CS 46A Homework #4 
+* File:            sortcomp.cpp 
+* Purpose:         compare timings for sort routines 
+* Start date:      4/2/97 
+* Programmer:      John Chen 
+* 
+****************************************************** 
+*/
+
+
+/*-----------------------------------------------*/
+
+
+
+/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+*/
