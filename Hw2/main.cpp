@@ -24,7 +24,7 @@ const int G_WINDOW_HEIGHT = 480;
 bool shouldExit = false;
 unsigned char kbPrevState[SDL_NUM_SCANCODES] = {0};
 const unsigned char* kbState = NULL;
-SDL_Window* window
+SDL_Window* window;
 
 using namespace std;
 
