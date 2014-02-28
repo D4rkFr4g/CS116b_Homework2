@@ -13,71 +13,65 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Shaders">
-      <UniqueIdentifier>{1e7a335c-ba2f-4670-973c-4920f495bbea}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="glsupport.cpp">
+    <ClCompile Include="..\..\..\MySdlApplication\glsupport.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ppm.cpp">
+    <ClCompile Include="..\..\..\MySdlApplication\MySdlApplication.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MySdlApplication.cpp">
+    <ClCompile Include="..\..\..\MySdlApplication\ppm.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="MySdlApplication.h">
+    <ClInclude Include="..\..\..\MySdlApplication\cvec.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="cvec.h">
+    <ClInclude Include="..\..\..\MySdlApplication\geometrymaker.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="geometrymaker.h">
+    <ClInclude Include="..\..\..\MySdlApplication\glsupport.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="glsupport.h">
+    <ClInclude Include="..\..\..\MySdlApplication\matrix4.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="matrix4.h">
+    <ClInclude Include="..\..\..\MySdlApplication\MySdlApplication.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\MySdlApplication\ppm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="glew32.dll">
+    <None Include="..\..\..\MySdlApplication\MyPhoto.jpg">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="SDL2.dll">
+    <None Include="..\..\..\MySdlApplication\MyPhoto.png">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="SDL2_image.dll">
+    <None Include="..\..\..\MySdlApplication\five.ppm">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="Shaders\basic-gl2.vshader">
-      <Filter>Shaders</Filter>
+    <None Include="..\..\..\MySdlApplication\four.ppm">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="Shaders\basic-gl3.vshader">
-      <Filter>Shaders</Filter>
+    <None Include="..\..\..\MySdlApplication\myphoto.ppm">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="Shaders\cube-gl2.fshader">
-      <Filter>Shaders</Filter>
+    <None Include="..\..\..\MySdlApplication\one.ppm">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="Shaders\cube-gl3.fshader">
-      <Filter>Shaders</Filter>
+    <None Include="..\..\..\MySdlApplication\six.ppm">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="Shaders\normal-gl2.fshader">
-      <Filter>Shaders</Filter>
+    <None Include="..\..\..\MySdlApplication\three.ppm">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="Shaders\normal-gl3.fshader">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="Shaders\texture-gl2.fshader">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="Shaders\texture-gl3.fshader">
-      <Filter>Shaders</Filter>
+    <None Include="..\..\..\MySdlApplication\two.ppm">
+      <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
 </Project>

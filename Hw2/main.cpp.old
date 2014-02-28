@@ -1,0 +1,947 @@
+/****************************************************** 
+* Copyright (c):   2014, All Rights Reserved. 
+* Project:         CS 116B Homework #2
+* File:            main.cpp 
+* Purpose:         Experiment with quadrics, fractals and SDL.
+* Start date:      2/23/14 
+* Programmer:      Zane Melcho, Jason Hungerford, Cesar Iñarrea
+* 
+****************************************************** 
+*/
+
+#include <vector>
+#include <string>
+#include <cmath>
+#include <memory>
+#include <stdexcept>
+#if __GNUG__
+#	include <tr1/memory>
+#endif
+
+#include "cvec.h"
+#include "matrix4.h"
+#include "geometrymaker.h"
+#include "ppm.h"
+#include "glsupport.h"
+#include "MySdlApplication.h"
+
+using namespace std;
+using namespace tr1;
+
+// Constants
+const int G_WINDOW_WIDTH = 640;
+const int G_WINDOW_HEIGHT = 480;
+static const bool G_GL2_COMPATIBLE = true;
+static const float G_FRUST_MIN_FOV = 60.0;  //A minimal of 60 degree field of view
+
+// Global variables
+bool running = true;
+unsigned char kbPrevState[SDL_NUM_SCANCODES] = {0};
+const unsigned char* kbState = NULL;
+SDL_Window* window;
+
+static bool g_mouseClickDown = false;    // is the mouse button pressed
+static bool g_mouseLClickButton, g_mouseRClickButton, g_mouseMClickButton;
+static int g_mouseClickX, g_mouseClickY; // coordinates for mouse click event
+static int g_activeShader = 0;
+
+static float g_frustFovY = G_FRUST_MIN_FOV; // FOV in y direction
+
+static const float g_frustNear = -0.1f;    // near plane
+static const float g_frustFar = -50.0f;    // far plane
+static const float g_groundY = -2.0f;      // y coordinate of the ground
+static const float g_groundSize = 10.0f;   // half the ground length
+
+static const int g_numShaders = 3;
+static const char * const g_shaderFiles[g_numShaders][3] = {
+    {"./shaders/basic-gl3.vshader", "./shaders/texture-gl3.fshader"},
+    {"./shaders/basic-gl3.vshader", "./shaders/normal-gl3.fshader"},
+    {"./shaders/basic-gl3.vshader", "./shaders/cube-gl3.fshader"}
+};
+static const char * const g_shaderFilesGl2[g_numShaders][3] = {
+    {"./shaders/basic-gl2.vshader", "./shaders/texture-gl2.fshader"},
+    {"./shaders/basic-gl2.vshader", "./shaders/normal-gl2.fshader"},
+    {"./shaders/basic-gl2.vshader", "./shaders/cube-gl2.fshader"}
+};
+
+static shared_ptr<GlTexture> g_tex0, g_tex1, g_tex2;
+
+// Macro used to obtain relative offset of a field within a struct
+#define FIELD_OFFSET(StructType, field) &(((StructType *)0)->field)
+
+/*-----------------------------------------------*/
+
+// --------- Scene
+
+static const Cvec3 g_light1(2.0, 3.0, 14.0);
+// define light positions in world space
+static Matrix4 g_skyRbt = Matrix4::makeTranslation(Cvec3(0.0, 0.25, 4.0));
+static Matrix4 g_objectRbt[1] = {Matrix4::makeTranslation(Cvec3(0,0,0))};
+// currently only 1 obj is defined
+static Cvec3f g_objectColors[1] = {Cvec3f(1, 0, 0)};
+
+///////////////// END OF G L O B A L S ///////////////////////
+
+struct ShaderState {
+    GlProgram program;
+
+    // Handles to uniform variables
+    GLint h_uLight;
+    GLint h_uProjMatrix;
+    GLint h_uModelViewMatrix;
+    GLint h_uNormalMatrix;
+    GLint h_uTexUnit0;
+    GLint h_uTexUnit1;
+    GLint h_uTexUnit2;
+
+    // Handles to vertex attributes
+    GLint h_aPosition;
+    GLint h_aNormal;
+    GLint h_aTexCoord0;
+    GLint h_aTexCoord1;
+
+    ShaderState(const char* vsfn, const char* fsfn) {
+        readAndCompileShader(program, vsfn, fsfn);
+
+        const GLuint h = program; // short hand
+
+        // Retrieve handles to uniform variables
+        h_uLight = safe_glGetUniformLocation(h, "uLight");
+        h_uProjMatrix = safe_glGetUniformLocation(h, "uProjMatrix");
+        h_uModelViewMatrix = safe_glGetUniformLocation(h, "uModelViewMatrix");
+        h_uNormalMatrix = safe_glGetUniformLocation(h, "uNormalMatrix");
+        h_uTexUnit0 = safe_glGetUniformLocation(h, "uTexUnit0");
+        h_uTexUnit1 = safe_glGetUniformLocation(h, "uTexUnit1");
+        h_uTexUnit2 = safe_glGetUniformLocation(h, "uTexUnit2");
+
+        // Retrieve handles to vertex attributes
+        h_aPosition = safe_glGetAttribLocation(h, "aPosition");
+        h_aNormal = safe_glGetAttribLocation(h, "aNormal");
+        h_aTexCoord0 = safe_glGetAttribLocation(h, "aTexCoord0");
+        h_aTexCoord1 = safe_glGetAttribLocation(h, "aTexCoord1");
+
+		if (!G_GL2_COMPATIBLE)
+            glBindFragDataLocation(h, 0, "fragColor");
+        checkGlErrors();
+    }
+
+};
+/*-----------------------------------------------*/
+struct Geometry
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    GlBufferObject vbo, texVbo, ibo;
+    int vboLen, iboLen;
+
+	/*-----------------------------------------------*/
+    Geometry(GenericVertex *vtx, unsigned short *idx, int vboLen, int iboLen)
+    {
+        this->vboLen = vboLen;
+        this->iboLen = iboLen;
+
+        // Now create the VBO and IBO
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
+                     GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * iboLen,
+                     idx, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ARRAY_BUFFER, texVbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
+                     GL_STATIC_DRAW);
+    }
+	/*-----------------------------------------------*/
+    void draw(const ShaderState& curSS)
+    {
+		/* PURPOSE:      What does this function do? (must be present) 
+		RECEIVES:   List every argument name and explain each argument. 
+					(omit if the function has no arguments) 
+		RETURNS:      Explain the value returned by the function. 
+					(omit if the function returns no value) 
+		REMARKS:      Explain any special preconditions or postconditions. 
+					See example below. (omit if function is unremarkable) 
+		*/
+
+        // Enable the attributes used by our shader
+        safe_glEnableVertexAttribArray(curSS.h_aPosition);
+        safe_glEnableVertexAttribArray(curSS.h_aNormal);
+        safe_glEnableVertexAttribArray(curSS.h_aTexCoord0);
+        safe_glEnableVertexAttribArray(curSS.h_aTexCoord1);
+
+        // bind vbo
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        safe_glVertexAttribPointer(curSS.h_aPosition, 3, GL_FLOAT, GL_FALSE,
+            sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, pos));
+        safe_glVertexAttribPointer(curSS.h_aNormal, 3, GL_FLOAT, GL_FALSE,
+             sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, normal));
+        glBindBuffer(GL_ARRAY_BUFFER, texVbo);
+        safe_glVertexAttribPointer(curSS.h_aTexCoord0, 2, GL_FLOAT, GL_FALSE,
+             sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
+        safe_glVertexAttribPointer(curSS.h_aTexCoord1, 2, GL_FLOAT, GL_FALSE,
+             sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
+        // bind ibo
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+
+        // draw!
+        glDrawElements(GL_TRIANGLES, iboLen, GL_UNSIGNED_SHORT, 0);
+
+        // Disable the attributes used by our shader
+        safe_glDisableVertexAttribArray(curSS.h_aPosition);
+        safe_glDisableVertexAttribArray(curSS.h_aNormal);
+        safe_glDisableVertexAttribArray(curSS.h_aTexCoord0);
+        safe_glDisableVertexAttribArray(curSS.h_aTexCoord1);
+    }
+};
+
+/*-----------------------------------------------*/
+static vector<shared_ptr<ShaderState> > g_shaderStates;
+// our global shader states
+// Vertex buffer and index buffer associated with the ground and cube geometry
+static shared_ptr<Geometry> g_cube;
+/*-----------------------------------------------*/
+static void initCubes()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    int ibLen, vbLen;
+    getCubeVbIbLen(vbLen, ibLen);
+
+    // Temporary storage for cube geometry
+    vector<GenericVertex> vtx(vbLen);
+    vector<unsigned short> idx(ibLen);
+
+    makeCube(1, vtx.begin(), idx.begin());
+    g_cube.reset(new Geometry(&vtx[0], &idx[0], vbLen, ibLen));
+}
+/*-----------------------------------------------*/
+static void sendProjectionMatrix(const ShaderState& curSS,
+                                 const Matrix4& projMatrix)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	// takes a projection matrix and send to the the shaders
+    GLfloat glmatrix[16];
+    projMatrix.writeToColumnMajorMatrix(glmatrix); // send projection matrix
+    safe_glUniformMatrix4fv(curSS.h_uProjMatrix, glmatrix);
+}
+/*-----------------------------------------------*/
+static void sendModelViewNormalMatrix(const ShaderState& curSS,
+                                      const Matrix4& MVM, const Matrix4& NMVM)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	// takes MVM and its normal matrix to the shaders
+    GLfloat glmatrix[16];
+    MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
+    safe_glUniformMatrix4fv(curSS.h_uModelViewMatrix, glmatrix);
+
+    NMVM.writeToColumnMajorMatrix(glmatrix); // send NMVM
+    safe_glUniformMatrix4fv(curSS.h_uNormalMatrix, glmatrix);
+}
+/*-----------------------------------------------*/
+static void updateFrustFovY()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    if (G_WINDOW_WIDTH >= G_WINDOW_HEIGHT)
+        g_frustFovY = G_FRUST_MIN_FOV;
+    else {
+        const float RAD_PER_DEG = 0.5f * (float) CS175_PI/180.0f;
+        g_frustFovY = (float) atan2( (float) sin(G_FRUST_MIN_FOV * RAD_PER_DEG) * (float) G_WINDOW_HEIGHT
+                            / (float) G_WINDOW_WIDTH,
+                            (float) cos(G_FRUST_MIN_FOV * RAD_PER_DEG)) / RAD_PER_DEG;
+    }
+}
+/*-----------------------------------------------*/
+static Matrix4 makeProjectionMatrix()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    return Matrix4::makeProjection(g_frustFovY,
+        G_WINDOW_WIDTH / static_cast <double> (G_WINDOW_HEIGHT),
+        g_frustNear, g_frustFar);
+}
+/*-----------------------------------------------*/
+static void initGLState()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    glClearColor((GLclampf)(128./255.), (GLclampf) (200./255.), (GLclampf) (255./255.), (GLclampf) 0.);
+    glClearDepth(0.);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glCullFace(GL_BACK);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_GREATER);
+    glReadBuffer(GL_BACK);
+    if (!G_GL2_COMPATIBLE) {
+        glEnable(GL_FRAMEBUFFER_SRGB);
+    }
+}
+/*-----------------------------------------------*/
+static void initShaders()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    g_shaderStates.resize(g_numShaders);
+    for (int i = 0; i < g_numShaders; ++i) {
+        if (G_GL2_COMPATIBLE) {
+            g_shaderStates[i].reset(new ShaderState(g_shaderFilesGl2[i][0],
+                                                    g_shaderFilesGl2[i][1]));
+        } else {
+            g_shaderStates[i].reset(new ShaderState(g_shaderFiles[i][0],
+                                                    g_shaderFiles[i][1]));
+        }
+    }
+}
+/*-----------------------------------------------*/
+static void initGeometry()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    initCubes();
+}
+/*-----------------------------------------------*/
+static void loadTexture(GLuint type, GLuint texHandle, const char *ppmFilename)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    int texWidth, texHeight;
+    vector<PackedPixel> pixData;
+
+//    ppmRead(ppmFilename, texWidth, texHeight, pixData);
+    SDL_Surface* newSurface = IMG_Load(ppmFilename); // read in image
+    SDL_Surface* returnSurface;
+    if(newSurface == NULL) {
+        cout << ":_( Surface null" <<endl;
+        return;
+    }
+    returnSurface = SDL_ConvertSurfaceFormat(newSurface,
+        SDL_PIXELFORMAT_RGB24, 0); // need to convert to RGB from RGBA
+    texWidth = returnSurface->w;
+    texHeight = returnSurface->h;
+    glActiveTexture(type);
+    glBindTexture(GL_TEXTURE_2D, texHandle);
+//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth,
+//                 texHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, &pixData[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth,
+                 texHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, returnSurface->pixels);
+    SDL_FreeSurface(newSurface);
+    checkGlErrors();
+}
+/*-----------------------------------------------*/
+static void loadCubeTexture(GLuint type, GLuint texHandle,
+                            const char *ppmFilename1, const char *ppmFilename2,
+                            const char *ppmFilename3, const char *ppmFilename4,
+                            const char *ppmFilename5, const char *ppmFilename6)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    int texWidth, texHeight;
+    vector<PackedPixel> pixData1, pixData2, pixData3,
+    pixData4, pixData5, pixData6;
+
+    ppmRead(ppmFilename1, texWidth, texHeight, pixData1);
+    ppmRead(ppmFilename2, texWidth, texHeight, pixData2);
+    ppmRead(ppmFilename3, texWidth, texHeight, pixData3);
+    ppmRead(ppmFilename4, texWidth, texHeight, pixData4);
+    ppmRead(ppmFilename5, texWidth, texHeight, pixData5);
+    ppmRead(ppmFilename6, texWidth, texHeight, pixData6);
+    glActiveTexture(type);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texHandle);
+
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0,
+                 GL_RGB, texWidth, texHeight, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, &pixData1[0]);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0,
+                 GL_RGB, texWidth, texHeight, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, &pixData2[0]);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 0,
+                 GL_RGB, texWidth, texHeight, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, &pixData3[0]);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, 0,
+                 GL_RGB, texWidth, texHeight, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, &pixData4[0]);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 0,
+                 GL_RGB, texWidth, texHeight, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, &pixData5[0]);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 0,
+                 GL_RGB, texWidth, texHeight, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, &pixData6[0]);
+    checkGlErrors();
+}
+/*-----------------------------------------------*/
+static void loadSphereNormalTexture(GLuint type, GLuint texHandle)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    int width = 512, height = 512;
+    vector<PackedPixel> pixels;
+    float x = 0;
+    float y = 0;
+    float z = 0;
+	float squareRootThree = sqrt((float) 3);
+    float invRootThree = 1/squareRootThree;
+
+    pixels.resize(width * height);
+    for (int row = height - 1; row >= 0; row--) {
+        for (int l = 0; l < width; l++) {
+            PackedPixel &p = pixels[row * width + l];
+            x = invRootThree * ((float)(row - width/2)/(width/2));
+            y = invRootThree * ((float)(l - height/2)/(height/2));
+            z = sqrt(1 - x*x - y*y);
+            p.r = (unsigned char)(255 * (x + 1)/2);
+            p.g = (unsigned char)(255 * (y + 1)/2);
+            p.b = (unsigned char)(255 * (z + 1)/2);
+        }
+    }
+
+    glActiveTexture(type);
+    glBindTexture(GL_TEXTURE_2D, texHandle);
+    glTexImage2D(GL_TEXTURE_2D, 0, G_GL2_COMPATIBLE ? GL_RGB : GL_SRGB, width,
+                 height, 0, GL_RGB, GL_UNSIGNED_BYTE, &pixels[0]);
+    checkGlErrors();
+}
+/*-----------------------------------------------*/
+static void initTextures() 
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    g_tex0.reset(new GlTexture());
+
+    loadTexture(GL_TEXTURE0, *g_tex0, "./MyPhoto.png");
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, *g_tex0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+
+    g_tex1.reset(new GlTexture());
+
+    loadSphereNormalTexture(GL_TEXTURE1, *g_tex1);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, *g_tex1);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    
+    g_tex2.reset(new GlTexture());
+    
+    loadCubeTexture(GL_TEXTURE2, *g_tex2, "./Images/one.ppm", "./Images/two.ppm",
+                    "./Images/three.ppm", "./Images/four.ppm", "./Images/five.ppm", "./Images/six.ppm");
+    
+    glEnable(GL_TEXTURE_CUBE_MAP);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, *g_tex2);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+}
+/*-----------------------------------------------*/
+static void drawStuff()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+    // short hand for current shader state
+    const ShaderState& curSS = *g_shaderStates[g_activeShader];
+
+    // build & send proj. matrix to vshader
+    const Matrix4 projmat = makeProjectionMatrix();
+    sendProjectionMatrix(curSS, projmat);
+
+    // use the skyRbt as the eyeRbt
+    const Matrix4 eyeRbt = g_skyRbt;
+    const Matrix4 invEyeRbt = inv(eyeRbt);
+
+    const Cvec3 eyeLight1 = Cvec3(invEyeRbt * Cvec4(g_light1, 1));
+    // g_light1 position in eye coordinates
+
+    safe_glUniform3f(curSS.h_uLight, (GLfloat) eyeLight1[0], (GLfloat) eyeLight1[1], (GLfloat) eyeLight1[2]);
+
+    safe_glUniform1i(curSS.h_uTexUnit0, 0);
+    safe_glUniform1i(curSS.h_uTexUnit1, 1);
+    safe_glUniform1i(curSS.h_uTexUnit2, 2);
+
+    const Matrix4 groundRbt = Matrix4();  // identity
+    Matrix4 MVM = invEyeRbt * groundRbt;
+    Matrix4 NMVM = normalMatrix(MVM);
+    // draw cubes
+    // ==========
+    MVM = invEyeRbt * g_objectRbt[0];
+    NMVM = normalMatrix(MVM);
+    sendModelViewNormalMatrix(curSS, MVM, NMVM);
+    g_cube->draw(curSS);
+}
+/*-----------------------------------------------*/
+void MySdlApplication::keyboard()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	if (kbState[ SDL_SCANCODE_L ])
+	{
+	}
+	else if (kbState[ SDL_SCANCODE_R ])
+	{
+	}
+	else if (kbState[ SDL_SCANCODE_O ])
+	{
+	}
+	else if (kbState[ SDL_SCANCODE_P ])
+	{
+	}
+	else if (kbState[ SDL_SCANCODE_T ])
+	{
+		g_activeShader++;
+        if(g_activeShader >= g_numShaders)
+            g_activeShader = 0;
+	}
+}
+/*-----------------------------------------------*/
+void MySdlApplication::mouse(SDL_MouseButtonEvent button)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	g_mouseClickX = button.x;
+    g_mouseClickY = G_WINDOW_HEIGHT - button.y - 1;
+
+    g_mouseLClickButton |= (button.button == SDL_BUTTON_LEFT &&
+                            button.state == SDL_PRESSED);
+    g_mouseRClickButton |= (button.button == SDL_BUTTON_RIGHT &&
+                            button.state == SDL_PRESSED);
+    g_mouseMClickButton |= (button.button == SDL_BUTTON_MIDDLE &&
+                            button.state == SDL_PRESSED);
+
+    g_mouseLClickButton &= !(button.button == SDL_BUTTON_LEFT &&
+                            button.state == SDL_RELEASED);
+    g_mouseRClickButton &= !(button.button == SDL_BUTTON_RIGHT &&
+                             button.state == SDL_RELEASED);
+    g_mouseMClickButton &= !(button.button == SDL_BUTTON_MIDDLE &&
+                             button.state == SDL_RELEASED);
+
+    g_mouseClickDown = g_mouseLClickButton || g_mouseRClickButton ||
+        g_mouseMClickButton;
+}
+/*-----------------------------------------------*/
+void MySdlApplication::motion(const int x, const int y)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	const double dx = x - g_mouseClickX;
+    const double dy = G_WINDOW_HEIGHT - y - 1 - g_mouseClickY;
+
+    Matrix4 m;
+    if (g_mouseLClickButton && !g_mouseRClickButton) {
+        // left button down?
+        m = Matrix4::makeXRotation(-dy) * Matrix4::makeYRotation(dx);
+    } else if (g_mouseRClickButton && !g_mouseLClickButton) {
+        // right button down?
+        m = Matrix4::makeTranslation(Cvec3(dx, dy, 0) * 0.01);
+    } else if (g_mouseMClickButton ||
+               (g_mouseLClickButton && g_mouseRClickButton)) {
+        // middle or (left and right) button down?
+        m = Matrix4::makeTranslation(Cvec3(0, 0, -dy) * 0.01);
+    }
+
+    if (g_mouseClickDown) {
+        g_objectRbt[0] *= m; // Simply right-multiply is WRONG
+    }
+
+    g_mouseClickX = x;
+    g_mouseClickY = G_WINDOW_HEIGHT - y - 1;
+}
+/*-----------------------------------------------*/
+void MySdlApplication::onLoop()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	// Logic goes here
+		keyboard();
+}
+/*-----------------------------------------------*/
+void MySdlApplication::onRender()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	// All draw calls go here
+	glUseProgram(g_shaderStates[g_activeShader]->program);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // clear framebuffer color&depth
+    drawStuff();
+
+	SDL_GL_SwapWindow(window);
+	checkGlErrors();
+}
+/*-----------------------------------------------*/
+int MySdlApplication::onExecute()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	if(onInit() == false) {
+        return -1;
+    }
+    SDL_Event Event;
+    while(running) {
+        while(SDL_PollEvent(&Event)) {
+            onEvent(&Event);
+        }
+
+        onLoop();
+        onRender();
+    }
+
+    onCleanup();
+
+    return 0;
+}
+/*-----------------------------------------------*/
+bool MySdlApplication::onInit()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	if(SDL_Init(SDL_INIT_EVERYTHING) < 0) {
+        return false;
+    }
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+
+    /* Turn on double buffering with a 24bit Z buffer.
+     * You may need to change this to 16 or 32 for your system */
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+
+    if((display = SDL_CreateWindow("My SDL Application",
+		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, G_WINDOW_WIDTH, G_WINDOW_HEIGHT,
+        SDL_WINDOW_OPENGL)) == NULL) {
+        return false;
+    }
+
+    /* Create our opengl context and attach it to our window */
+
+    SDL_GLContext maincontext = SDL_GL_CreateContext(display);
+    /* This makes our buffer swap syncronized with the 
+      monitor's vertical refresh */
+    SDL_GL_SetSwapInterval(1);
+
+	GLenum glewError = glewInit();
+	if( glewError != GLEW_OK ) 
+	{
+		SDL_Quit();
+		return 1;
+	}
+	if( !GLEW_VERSION_1_5 ) 
+	{
+		SDL_Quit();
+		return 1;
+	}
+
+    cout << (G_GL2_COMPATIBLE ?
+        "Will use OpenGL 2.x / GLSL 1.0" : "Will use OpenGL 3.x / GLSL 1.3")
+        << endl;
+    if ((!G_GL2_COMPATIBLE) && !GLEW_VERSION_3_0)
+        throw runtime_error(
+            "Error: does not support OpenGL Shading Language v1.3");
+    else if (G_GL2_COMPATIBLE && !GLEW_VERSION_2_0)
+        throw runtime_error(
+            "Error: does not support OpenGL Shading Language v1.0");
+
+    initGLState();
+    initShaders();
+    initGeometry();
+    initTextures();
+
+    return true;
+}
+/*-----------------------------------------------*/
+void MySdlApplication::onEvent(SDL_Event* event) 
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	Uint32 type = event->type;
+
+	if (type == SDL_QUIT)
+		running = false;
+	else if (type == SDL_MOUSEBUTTONDOWN)
+		mouse(event->button);
+	else if (type == SDL_MOUSEBUTTONUP)
+		mouse(event->button);
+	else if (type == SDL_MOUSEMOTION)
+		motion(event->motion.x, event->motion.y);
+}
+/*-----------------------------------------------*/
+void MySdlApplication::onCleanup()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	SDL_Quit();
+}
+/*-----------------------------------------------*/
+MySdlApplication::MySdlApplication()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+	running = true;
+}
+/*-----------------------------------------------*/
+int main(int argc, const char* argv[])
+{	
+	MySdlApplication application;
+	return application.onExecute();
+/*
+	// Initialize SDL
+	if( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0 ) 
+	{
+		return 1;
+	}
+ 
+	// Create the window, OpenGL context
+	SDL_GL_SetAttribute( SDL_GL_BUFFER_SIZE, 32 );
+	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
+	window = SDL_CreateWindow(
+	"SDL Test",
+	SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+	G_WINDOW_WIDTH, G_WINDOW_HEIGHT,
+	SDL_WINDOW_OPENGL);
+	glCullFace( GL_BACK );
+
+
+	if( !window ) 
+	{
+		SDL_Quit();
+		return 1;
+	}
+	SDL_GL_CreateContext( window );
+
+	// Make sure we have a recent version of OpenGL
+	GLenum glewError = glewInit();
+	if( glewError != GLEW_OK ) 
+	{
+		SDL_Quit();
+		return 1;
+	}
+	if( !GLEW_VERSION_1_5 ) 
+	{
+		SDL_Quit();
+		return 1;
+	}
+
+	// Setup calls
+	kbState = SDL_GetKeyboardState(NULL);
+
+	// The game loop
+	while(running) 
+	{
+		memcpy (kbPrevState, kbState, sizeof( kbPrevState ));
+
+		
+
+		
+	}
+
+	SDL_Quit();
+	return 0;
+*/
+}
+
+//Coding Guidelines template (REMOVE before Submission)
+
+/****************************************************** 
+* Copyright (c):   1994, All Rights Reserved. 
+* Project:         CS 46A Homework #4 
+* File:            sortcomp.cpp 
+* Purpose:         compare timings for sort routines 
+* Start date:      4/2/97 
+* Programmer:      John Chen 
+* 
+****************************************************** 
+*/
+
+
+/*-----------------------------------------------*/
+
+
+
+/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+*/

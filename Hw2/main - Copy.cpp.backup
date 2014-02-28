@@ -75,6 +75,33 @@ static void keyboard()
 	}
 }
 /*-----------------------------------------------*/
+static void mouse(SDL_MouseButtonEvent button)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+
+}
+static void motion(const int x, const int y)
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+
+}
+/*-----------------------------------------------*/
 static void onRender()
 {
 	/* PURPOSE:      What does this function do? (must be present) 
@@ -91,6 +118,48 @@ static void onRender()
 
 
 	SDL_GL_SwapWindow(window);
+}
+/*-----------------------------------------------*/
+static int onExecute()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+
+}
+/*-----------------------------------------------*/
+static bool onInit()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+
+}
+/*-----------------------------------------------*/
+static void onCleanup()
+{
+	/* PURPOSE:      What does this function do? (must be present) 
+   RECEIVES:   List every argument name and explain each argument. 
+               (omit if the function has no arguments) 
+   RETURNS:      Explain the value returned by the function. 
+               (omit if the function returns no value) 
+   REMARKS:      Explain any special preconditions or postconditions. 
+               See example below. (omit if function is unremarkable) 
+	*/
+
+
 }
 /*-----------------------------------------------*/
 int main( void )
