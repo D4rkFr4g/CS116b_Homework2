@@ -79,6 +79,8 @@
     <ClInclude Include="glsupport.h" />
     <ClInclude Include="matrix4.h" />
     <ClInclude Include="MySdlApplication.h" />
+    <ClInclude Include="quat.h" />
+    <ClInclude Include="rigtform.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="glew32.dll" />

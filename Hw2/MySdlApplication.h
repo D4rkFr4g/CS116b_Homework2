@@ -15,7 +15,7 @@ class MySdlApplication
         void motion(const int x, const int y);
 
     public:
-        MySdlApplication();
+		MySdlApplication();
         int onExecute();
         bool onInit();
 		void onEvent(SDL_Event* Event);

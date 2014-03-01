@@ -23,28 +23,45 @@
 #include "geometrymaker.h"
 #include "ppm.h"
 #include "glsupport.h"
+#include "rigtform.h"
 #include "MySdlApplication.h"
 
 using namespace std;
 using namespace tr1;
 
+// Forward Declarations
+struct RigidBody;
+struct ShaderState;
+static const ShaderState& setupShader(int material);
+
+// Enum
+enum {DIFFUSE, SOLID, TEXTURE, NORMAL, ANISOTROPY, CUBE};
+
 // Constants
-const int G_WINDOW_WIDTH = 640;
-const int G_WINDOW_HEIGHT = 480;
 static const bool G_GL2_COMPATIBLE = false;
 static const float G_FRUST_MIN_FOV = 60.0;  //A minimal of 60 degree field of view
-const unsigned char* KB_STATE = NULL;
+static const unsigned char* KB_STATE = NULL;
+static const int G_NUM_OF_OBJECTS = 1; //Number of objects to be drawn
 
-static const int G_NUM_SHADERS = 3;
-static const char * const G_SHADER_FILES[G_NUM_SHADERS][2] = {
-    {"./Shaders/basic-gl3.vshader", "./Shaders/texture-gl3.fshader"},
-    {"./Shaders/basic-gl3.vshader", "./Shaders/normal-gl3.fshader"},
-    {"./Shaders/basic-gl3.vshader", "./Shaders/cube-gl3.fshader"}
+static const int G_NUM_SHADERS = 6;
+static const char * const G_SHADER_FILES[G_NUM_SHADERS][2] = 
+{
+	{"./Shaders/basic-gl3.vshader", "./Shaders/diffuse-gl3.fshader"},
+	{"./Shaders/basic-gl3.vshader", "./Shaders/solid-gl3.fshader"},
+   {"./Shaders/basic-gl3.vshader", "./Shaders/texture-gl3.fshader"},
+   {"./Shaders/basic-gl3.vshader", "./Shaders/normal-gl3.fshader"},
+	{"./Shaders/basic-gl3.vshader", "./Shaders/anisotropy-gl3.fshader"},
+	{"./Shaders/basic-gl3.vshader", "./Shaders/cube-gl3.fshader"}
+
 };
-static const char * const G_SHADER_FILES_GL2[G_NUM_SHADERS][2] = {
-    {"./Shaders/basic-gl2.vshader", "./Shaders/texture-gl2.fshader"},
-    {"./Shaders/basic-gl2.vshader", "./Shaders/normal-gl2.fshader"},
-    {"./Shaders/basic-gl2.vshader", "./Shaders/cube-gl2.fshader"}
+static const char * const G_SHADER_FILES_GL2[G_NUM_SHADERS][2] = 
+{
+	{"./Shaders/basic-gl2.vshader", "./Shaders/diffuse-gl2.fshader"},
+	{"./Shaders/basic-gl2.vshader", "./Shaders/solid-gl2.fshader"},
+   {"./Shaders/basic-gl2.vshader", "./Shaders/texture-gl2.fshader"},
+   {"./Shaders/basic-gl2.vshader", "./Shaders/normal-gl2.fshader"},
+	{"./Shaders/basic-gl2.vshader", "./Shaders/anisotropy-gl2.fshader"},
+	{"./Shaders/basic-gl2.vshader", "./Shaders/cube-gl2.fshader"}
 };
 
 static const float G_FRUST_NEAR = -0.1f;    // near plane
@@ -53,6 +70,8 @@ static const float G_GROUND_Y = -2.0f;      // y coordinate of the ground
 static const float G_GROUND_SIZE = 10.0f;   // half the ground length
 
 // Global variables
+int g_windowWidth = 640;
+int g_windowHeight = 480;
 unsigned char kbPrevState[SDL_NUM_SCANCODES] = {0};
 
 static bool g_mouseClickDown = false;    // is the mouse button pressed
@@ -71,263 +90,524 @@ static shared_ptr<GlTexture> g_tex0, g_tex1, g_tex2;
 
 // --------- Scene
 
-static const Cvec3 G_LIGHT1(2.0, 3.0, 14.0);
+static Cvec3 g_light1(2.0, 3.0, 14.0);
+static Cvec3 g_light2(-2000.0, -3000.0, -5000.0);
 // define light positions in world space
-static Matrix4 g_skyRbt = Matrix4::makeTranslation(Cvec3(0.0, 0.25, 4.0));
-static Matrix4 g_objectRbt[1] = {Matrix4::makeTranslation(Cvec3(0,0,0))};
-// currently only 1 obj is defined
+static RigTForm g_skyRbt = RigTForm(Cvec3(0.0, 0.25, 4.0));
+static RigTForm g_eyeRbt = g_skyRbt;
 static Cvec3f g_objectColors[1] = {Cvec3f(1, 0, 0)};
 
 ///////////////// END OF G L O B A L S ///////////////////////
 
-struct ShaderState {
-    GlProgram program;
+struct ShaderState 
+{
+	GlProgram program;
 
-    // Handles to uniform variables
-    GLint h_uLight;
-    GLint h_uProjMatrix;
-    GLint h_uModelViewMatrix;
-    GLint h_uNormalMatrix;
-    GLint h_uTexUnit0;
-    GLint h_uTexUnit1;
-    GLint h_uTexUnit2;
+	// Handles to uniform variables
+	GLint h_uLight, h_uLight2;
+	GLint h_uProjMatrix;
+	GLint h_uModelViewMatrix;
+	GLint h_uNormalMatrix;
+	GLint h_uColor;
+	GLint h_uTexUnit0;
+	GLint h_uTexUnit1;
+	GLint h_uTexUnit2;
 
-    // Handles to vertex attributes
-    GLint h_aPosition;
-    GLint h_aNormal;
-    GLint h_aTexCoord0;
-    GLint h_aTexCoord1;
+	// Handles to vertex attributes
+	GLint h_aPosition;
+	GLint h_aNormal;
+	GLint h_aTangent;
+	GLint h_aTexCoord0;
+	GLint h_aTexCoord1;
 
-    ShaderState(const char* vsfn, const char* fsfn) {
-        readAndCompileShader(program, vsfn, fsfn);
+	/*-----------------------------------------------*/
+	ShaderState(const char* vsfn, const char* fsfn) 
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
+		*/
 
-        const GLuint h = program; // short hand
+		readAndCompileShader(program, vsfn, fsfn);
 
-        // Retrieve handles to uniform variables
-        h_uLight = safe_glGetUniformLocation(h, "uLight");
-        h_uProjMatrix = safe_glGetUniformLocation(h, "uProjMatrix");
-        h_uModelViewMatrix = safe_glGetUniformLocation(h, "uModelViewMatrix");
-        h_uNormalMatrix = safe_glGetUniformLocation(h, "uNormalMatrix");
-        h_uTexUnit0 = safe_glGetUniformLocation(h, "uTexUnit0");
-        h_uTexUnit1 = safe_glGetUniformLocation(h, "uTexUnit1");
-        h_uTexUnit2 = safe_glGetUniformLocation(h, "uTexUnit2");
+		const GLuint h = program; // short hand
 
-        // Retrieve handles to vertex attributes
-        h_aPosition = safe_glGetAttribLocation(h, "aPosition");
-        h_aNormal = safe_glGetAttribLocation(h, "aNormal");
-        h_aTexCoord0 = safe_glGetAttribLocation(h, "aTexCoord0");
-        h_aTexCoord1 = safe_glGetAttribLocation(h, "aTexCoord1");
+		// Retrieve handles to uniform variables
+		h_uLight = safe_glGetUniformLocation(h, "uLight");
+		h_uLight2 = safe_glGetUniformLocation(h, "uLight2");
+		h_uProjMatrix = safe_glGetUniformLocation(h, "uProjMatrix");
+		h_uModelViewMatrix = safe_glGetUniformLocation(h, "uModelViewMatrix");
+		h_uNormalMatrix = safe_glGetUniformLocation(h, "uNormalMatrix");
+		h_uColor = safe_glGetUniformLocation(h, "uColor");
+		h_uTexUnit0 = safe_glGetUniformLocation(h, "uTexUnit0");
+		h_uTexUnit1 = safe_glGetUniformLocation(h, "uTexUnit1");
+		h_uTexUnit2 = safe_glGetUniformLocation(h, "uTexUnit2");
+
+		// Retrieve handles to vertex attributes
+		h_aPosition = safe_glGetAttribLocation(h, "aPosition");
+		h_aNormal = safe_glGetAttribLocation(h, "aNormal");
+		h_aTangent = safe_glGetAttribLocation(h, "aTangent");
+		h_aTexCoord0 = safe_glGetAttribLocation(h, "aTexCoord0");
+		h_aTexCoord1 = safe_glGetAttribLocation(h, "aTexCoord1");
 
 		if (!G_GL2_COMPATIBLE)
-            glBindFragDataLocation(h, 0, "fragColor");
-        checkGlErrors();
+			glBindFragDataLocation(h, 0, "fragColor");
+		checkGlErrors();
     }
-
+	/*-----------------------------------------------*/
 };
 /*-----------------------------------------------*/
 struct Geometry
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
-	*/
-
-    GlBufferObject vbo, texVbo, ibo;
-    int vboLen, iboLen;
+	GlBufferObject vbo, texVbo, ibo;
+   int vboLen, iboLen;
 
 	/*-----------------------------------------------*/
-    Geometry(GenericVertex *vtx, unsigned short *idx, int vboLen, int iboLen)
-    {
-        this->vboLen = vboLen;
-        this->iboLen = iboLen;
+	Geometry(GenericVertex *vtx, unsigned short *idx, int vboLen, int iboLen)
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
+		*/
+		this->vboLen = vboLen;
+		this->iboLen = iboLen;
 
-        // Now create the VBO and IBO
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
-                     GL_STATIC_DRAW);
+		// Now create the VBO and IBO
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
+						GL_STATIC_DRAW);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * iboLen,
-                     idx, GL_STATIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * iboLen,
+						idx, GL_STATIC_DRAW);
 
-        glBindBuffer(GL_ARRAY_BUFFER, texVbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
-                     GL_STATIC_DRAW);
-    }
+		glBindBuffer(GL_ARRAY_BUFFER, texVbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
+						GL_STATIC_DRAW);
+	}
 	/*-----------------------------------------------*/
-    void draw(const ShaderState& curSS)
+	void draw(const ShaderState& curSS)
     {
-		/* PURPOSE:      What does this function do? (must be present) 
-		RECEIVES:   List every argument name and explain each argument. 
-					(omit if the function has no arguments) 
-		RETURNS:      Explain the value returned by the function. 
-					(omit if the function returns no value) 
-		REMARKS:      Explain any special preconditions or postconditions. 
-					See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
 		*/
 
-        // Enable the attributes used by our shader
-        safe_glEnableVertexAttribArray(curSS.h_aPosition);
-        safe_glEnableVertexAttribArray(curSS.h_aNormal);
-        safe_glEnableVertexAttribArray(curSS.h_aTexCoord0);
-        safe_glEnableVertexAttribArray(curSS.h_aTexCoord1);
+      // Enable the attributes used by our shader
+		safe_glEnableVertexAttribArray(curSS.h_aPosition);
+		safe_glEnableVertexAttribArray(curSS.h_aNormal);
+		safe_glEnableVertexAttribArray(curSS.h_aTexCoord0);
+		safe_glEnableVertexAttribArray(curSS.h_aTexCoord1);
 
-        // bind vbo
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        safe_glVertexAttribPointer(curSS.h_aPosition, 3, GL_FLOAT, GL_FALSE,
-            sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, pos));
-        safe_glVertexAttribPointer(curSS.h_aNormal, 3, GL_FLOAT, GL_FALSE,
-             sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, normal));
-        glBindBuffer(GL_ARRAY_BUFFER, texVbo);
-        safe_glVertexAttribPointer(curSS.h_aTexCoord0, 2, GL_FLOAT, GL_FALSE,
-             sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
-        safe_glVertexAttribPointer(curSS.h_aTexCoord1, 2, GL_FLOAT, GL_FALSE,
-             sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
-        // bind ibo
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		// bind vbo
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		safe_glVertexAttribPointer(curSS.h_aPosition, 3, GL_FLOAT, GL_FALSE,
+			sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, pos));
+		safe_glVertexAttribPointer(curSS.h_aNormal, 3, GL_FLOAT, GL_FALSE,
+				sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, normal));
+		glBindBuffer(GL_ARRAY_BUFFER, texVbo);
+		safe_glVertexAttribPointer(curSS.h_aTexCoord0, 2, GL_FLOAT, GL_FALSE,
+				sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
+		safe_glVertexAttribPointer(curSS.h_aTexCoord1, 2, GL_FLOAT, GL_FALSE,
+				sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
+		// bind ibo
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 
-        // draw!
-        glDrawElements(GL_TRIANGLES, iboLen, GL_UNSIGNED_SHORT, 0);
+		// draw!
+		glDrawElements(GL_TRIANGLES, iboLen, GL_UNSIGNED_SHORT, 0);
 
-        // Disable the attributes used by our shader
-        safe_glDisableVertexAttribArray(curSS.h_aPosition);
-        safe_glDisableVertexAttribArray(curSS.h_aNormal);
-        safe_glDisableVertexAttribArray(curSS.h_aTexCoord0);
-        safe_glDisableVertexAttribArray(curSS.h_aTexCoord1);
+		// Disable the attributes used by our shader
+		safe_glDisableVertexAttribArray(curSS.h_aPosition);
+		safe_glDisableVertexAttribArray(curSS.h_aNormal);
+		safe_glDisableVertexAttribArray(curSS.h_aTexCoord0);
+		safe_glDisableVertexAttribArray(curSS.h_aTexCoord1);
     }
-};
+	/*-----------------------------------------------*/
+	void draw(const ShaderState& curSS, Matrix4 MVM)
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
+		*/
 
+		Matrix4 NMVM = normalMatrix(MVM);
+
+		GLfloat glmatrix[16];
+		MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
+		safe_glUniformMatrix4fv(curSS.h_uModelViewMatrix, glmatrix);
+
+		NMVM.writeToColumnMajorMatrix(glmatrix); // send NMVM
+		safe_glUniformMatrix4fv(curSS.h_uNormalMatrix, glmatrix);
+
+		draw(curSS);
+	}
+};
+/*-----------------------------------------------*/
+struct RigidBody
+{
+	RigTForm rtf;
+	Matrix4 scale;
+	RigidBody **children;
+	int numOfChildren;
+	Cvec3 color;
+	Geometry *geom;
+	bool isVisible;
+	bool isChildVisible;
+	string name;
+	int material;
+
+	RigidBody()
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
+		*/
+
+		rtf = RigTForm();
+		scale = Matrix4();
+		children = NULL;
+		numOfChildren = 0;
+		color = Cvec3(.5,.5,.5);
+		geom = NULL;
+		isVisible = true;
+		isChildVisible = true;
+		material = SOLID;
+	}
+
+	~RigidBody()
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
+		*/
+
+		for (int i =0; i < numOfChildren; i++)
+			delete children[i];
+		delete []children;
+		delete geom;
+	}
+
+	RigidBody(RigTForm rtf_, Matrix4 scale_, RigidBody **children_, Geometry *geom_, Cvec3 color_, int material_)
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
+		*/
+
+		rtf = rtf_;
+		scale = scale_;
+		children = children_;
+		numOfChildren = 0;
+		geom = geom_;
+		color = color_;
+		isVisible = true;
+		material = material_;
+	}
+
+	void drawRigidBody(RigTForm invEyeRbt)
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
+		*/
+
+		RigTForm respectFrame = invEyeRbt;
+		draw(respectFrame, Matrix4());
+	}
+
+	void draw(RigTForm respectFrame_, Matrix4 respectScale_)
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
+		*/
+
+		const ShaderState& curSS = setupShader(material);
+		safe_glUniform3f(curSS.h_uColor, (GLfloat) color[0], (GLfloat) color[1], (GLfloat) color[2]);
+	
+		// Draw Parent
+		RigTForm respectFrame = respectFrame_ * rtf;
+		Matrix4 respectScale = respectScale_ * scale;
+		Matrix4 MVM = RigTForm::makeTRmatrix(respectFrame, respectScale);
+
+		if (isVisible)
+		{
+			if (geom != NULL)
+				geom->draw(curSS, MVM);
+		}
+
+		//Draw Children
+		if (isChildVisible)
+		{
+			for (int i = 0; i < numOfChildren; i++)
+			{
+				children[i]->draw(respectFrame, respectScale);
+			}
+		}
+		
+	}
+
+	void draw(Matrix4 respectFrame_)
+	{
+		/*	PURPOSE:		What does this function do? (must be present) 
+			RECEIVES:	List every argument name and explain each argument. 
+							(omit if the function has no arguments) 
+			RETURNS:		Explain the value returned by the function. 
+							(omit if the function returns no value) 
+			REMARKS:		Explain any special preconditions or postconditions. 
+							See example below. (omit if function is unremarkable) 
+		*/
+
+		const ShaderState& curSS = setupShader(material);
+		safe_glUniform3f(curSS.h_uColor, (GLfloat) color[0], (GLfloat) color[1], (GLfloat) color[2]);
+			
+		//Draw parent
+		Matrix4 respectFrame = respectFrame_ * RigTForm::makeTRmatrix(rtf, scale);
+		Matrix4 MVM = respectFrame;
+
+		if (isVisible)
+		{
+			if (geom != NULL)
+				geom->draw(curSS, MVM);
+		}
+
+		//Draw Children
+		for (int i = 0; i < numOfChildren; i++)
+		{
+			children[i]->draw(respectFrame);
+		}
+	}
+};
 /*-----------------------------------------------*/
 static vector<shared_ptr<ShaderState> > g_shaderStates;
 // our global shader states
 // Vertex buffer and index buffer associated with the ground and cube geometry
-static shared_ptr<Geometry> g_cube;
+static shared_ptr<Geometry> g_ground, g_cube, g_sphere, g_triangle;
+static RigidBody g_rigidBodies[G_NUM_OF_OBJECTS]; // Array that holds each Rigid Body Object
 /*-----------------------------------------------*/
-static void initCubes()
+static void initGround() 
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    int ibLen, vbLen;
-    getCubeVbIbLen(vbLen, ibLen);
+	// A x-z plane at y = g_groundY of dimension [-g_groundSize, g_groundSize]^2
+	GenericVertex vtx[4] = 
+	{
+		GenericVertex(-G_GROUND_SIZE, G_GROUND_Y, -G_GROUND_SIZE, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+		GenericVertex(-G_GROUND_SIZE, G_GROUND_Y,  G_GROUND_SIZE, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+		GenericVertex( G_GROUND_SIZE, G_GROUND_Y,  G_GROUND_SIZE, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+		GenericVertex( G_GROUND_SIZE, G_GROUND_Y, -G_GROUND_SIZE, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+	};
+	unsigned short idx[] = {0, 1, 2, 0, 2, 3};
+	g_ground.reset(new Geometry(&vtx[0], &idx[0], 4, 6));
+}
+/*-----------------------------------------------*/
+static Geometry* initCube()
+{
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
+	*/
 
-    // Temporary storage for cube geometry
-    vector<GenericVertex> vtx(vbLen);
-    vector<unsigned short> idx(ibLen);
+	int ibLen, vbLen;
+	getCubeVbIbLen(vbLen, ibLen);
 
-    makeCube(1, vtx.begin(), idx.begin());
-    g_cube.reset(new Geometry(&vtx[0], &idx[0], vbLen, ibLen));
+	// Temporary storage for cube geometry
+	vector<GenericVertex> vtx(vbLen);
+	vector<unsigned short> idx(ibLen);
+
+	makeCube(1, vtx.begin(), idx.begin());
+	return new Geometry(&vtx[0], &idx[0], vbLen, ibLen);
+}
+/*-----------------------------------------------*/
+static RigidBody* buildCube()
+{
+	/*	PURPOSE:		Builds a cube object
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
+	*/
+
+	float width = 1;
+	float height = 1;
+	float thick = 1;
+
+	RigTForm rigTemp = RigTForm(Cvec3(0, 0, 0));
+	Matrix4 scaleTemp = Matrix4();
+
+	// Make container
+	RigidBody *container = new RigidBody(RigTForm(), Matrix4(), NULL, initCube(), Cvec3(0.5, 0.5, 0.5), DIFFUSE);
+	container->isVisible = false;
+	container->name = "container";
+
+	// Make Cube
+	rigTemp = RigTForm(Cvec3(0, 0, 0));
+	scaleTemp = Matrix4::makeScale(Cvec3(width, height, thick));	
+
+	RigidBody *cube = new RigidBody(rigTemp, scaleTemp, NULL, initCube(), Cvec3(1,0,0), TEXTURE);
+	cube->name = "cube";
+
+	//Setup Children
+	container->numOfChildren = 1;
+	container->children = new RigidBody*[container->numOfChildren];
+	container->children[0] = cube;
+
+	return container;
+
+}
+/*-----------------------------------------------*/
+static void initTextureCube()
+{
+	RigidBody *cube;
+	cube = buildCube();
+	g_rigidBodies[0] = *cube;
 }
 /*-----------------------------------------------*/
 static void sendProjectionMatrix(const ShaderState& curSS,
                                  const Matrix4& projMatrix)
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	// takes a projection matrix and send to the the shaders
-    GLfloat glmatrix[16];
-    projMatrix.writeToColumnMajorMatrix(glmatrix); // send projection matrix
-    safe_glUniformMatrix4fv(curSS.h_uProjMatrix, glmatrix);
+	GLfloat glmatrix[16];
+	projMatrix.writeToColumnMajorMatrix(glmatrix); // send projection matrix
+	safe_glUniformMatrix4fv(curSS.h_uProjMatrix, glmatrix);
 }
 /*-----------------------------------------------*/
 static void sendModelViewNormalMatrix(const ShaderState& curSS,
                                       const Matrix4& MVM, const Matrix4& NMVM)
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	// takes MVM and its normal matrix to the shaders
-    GLfloat glmatrix[16];
-    MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
-    safe_glUniformMatrix4fv(curSS.h_uModelViewMatrix, glmatrix);
+	GLfloat glmatrix[16];
+	MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
+	safe_glUniformMatrix4fv(curSS.h_uModelViewMatrix, glmatrix);
 
-    NMVM.writeToColumnMajorMatrix(glmatrix); // send NMVM
-    safe_glUniformMatrix4fv(curSS.h_uNormalMatrix, glmatrix);
+	NMVM.writeToColumnMajorMatrix(glmatrix); // send NMVM
+	safe_glUniformMatrix4fv(curSS.h_uNormalMatrix, glmatrix);
 }
 /*-----------------------------------------------*/
 static void updateFrustFovY()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    if (G_WINDOW_WIDTH >= G_WINDOW_HEIGHT)
-        g_frustFovY = G_FRUST_MIN_FOV;
-    else {
-        const float RAD_PER_DEG = 0.5f * (float) CS175_PI/180.0f;
-        g_frustFovY = (float) atan2( (float) sin(G_FRUST_MIN_FOV * RAD_PER_DEG) * (float) G_WINDOW_HEIGHT
-                            / (float) G_WINDOW_WIDTH,
-                            (float) cos(G_FRUST_MIN_FOV * RAD_PER_DEG)) / RAD_PER_DEG;
-    }
+	if (g_windowWidth >= g_windowHeight)
+		g_frustFovY = G_FRUST_MIN_FOV;
+	else 
+	{
+		const float RAD_PER_DEG = 0.5f * (float) CS175_PI/180.0f;
+		g_frustFovY = (float) atan2( (float) sin(G_FRUST_MIN_FOV * RAD_PER_DEG) * (float) g_windowHeight
+									/ (float) g_windowWidth,
+									(float) cos(G_FRUST_MIN_FOV * RAD_PER_DEG)) / RAD_PER_DEG;
+	}
 }
 /*-----------------------------------------------*/
 static Matrix4 makeProjectionMatrix()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    return Matrix4::makeProjection(g_frustFovY,
-        G_WINDOW_WIDTH / static_cast <double> (G_WINDOW_HEIGHT),
+	return Matrix4::makeProjection(g_frustFovY,
+        g_windowWidth / static_cast <double> (g_windowHeight),
         G_FRUST_NEAR, G_FRUST_FAR);
 }
 /*-----------------------------------------------*/
 static void initGLState()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    glClearColor((GLclampf)(128./255.), (GLclampf) (200./255.), (GLclampf) (255./255.), (GLclampf) 0.);
-    glClearDepth(0.);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glCullFace(GL_BACK);
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_GREATER);
-    glReadBuffer(GL_BACK);
-    if (!G_GL2_COMPATIBLE) {
-        glEnable(GL_FRAMEBUFFER_SRGB);
-    }
+	glClearColor((GLclampf)(128./255.), (GLclampf) (200./255.), (GLclampf) (255./255.), (GLclampf) 0.);
+	glClearDepth(0.);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glCullFace(GL_BACK);
+	glEnable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_GREATER);
+	glReadBuffer(GL_BACK);
+	if (!G_GL2_COMPATIBLE)
+		glEnable(GL_FRAMEBUFFER_SRGB);
 }
 /*-----------------------------------------------*/
 static void initShaders()
@@ -341,65 +621,70 @@ static void initShaders()
                See example below. (omit if function is unremarkable) 
 	*/
 
-    g_shaderStates.resize(G_NUM_SHADERS);
-    for (int i = 0; i < G_NUM_SHADERS; ++i) {
-        if (G_GL2_COMPATIBLE) {
-            g_shaderStates[i].reset(new ShaderState(G_SHADER_FILES_GL2[i][0],
-                                                    G_SHADER_FILES_GL2[i][1]));
-        } else {
-            g_shaderStates[i].reset(new ShaderState(G_SHADER_FILES[i][0],
-                                                    G_SHADER_FILES[i][1]));
-        }
-    }
+	g_shaderStates.resize(G_NUM_SHADERS);
+   for (int i = 0; i < G_NUM_SHADERS; ++i) 
+	{
+		if (G_GL2_COMPATIBLE) 
+		{
+			g_shaderStates[i].reset(new ShaderState(G_SHADER_FILES_GL2[i][0],
+																	G_SHADER_FILES_GL2[i][1]));
+		} 
+		else 
+		{
+			g_shaderStates[i].reset(new ShaderState(G_SHADER_FILES[i][0],
+																	G_SHADER_FILES[i][1]));
+		}
+	}
 }
 /*-----------------------------------------------*/
 static void initGeometry()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
-
-    initCubes();
+	initGround();
+	initTextureCube();
 }
 /*-----------------------------------------------*/
 static void loadTexture(GLuint type, GLuint texHandle, const char *ppmFilename)
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    int texWidth, texHeight;
-    vector<PackedPixel> pixData;
+	int texWidth, texHeight;
+	vector<PackedPixel> pixData;
 
-//    ppmRead(ppmFilename, texWidth, texHeight, pixData);
-    SDL_Surface* newSurface = IMG_Load(ppmFilename); // read in image
-    SDL_Surface* returnSurface;
-    if(newSurface == NULL) {
-        cout << ":_( Surface null" <<endl;
-        return;
-    }
-    returnSurface = SDL_ConvertSurfaceFormat(newSurface,
-        SDL_PIXELFORMAT_RGB24, 0); // need to convert to RGB from RGBA
-    texWidth = returnSurface->w;
-    texHeight = returnSurface->h;
-    glActiveTexture(type);
-    glBindTexture(GL_TEXTURE_2D, texHandle);
-//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth,
-//                 texHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, &pixData[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth,
-                 texHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, returnSurface->pixels);
-    SDL_FreeSurface(newSurface);
-    checkGlErrors();
+	//    ppmRead(ppmFilename, texWidth, texHeight, pixData);
+	SDL_Surface* newSurface = IMG_Load(ppmFilename); // read in image
+	SDL_Surface* returnSurface;
+	if(newSurface == NULL) 
+	{
+		cout << ":_( Surface null" <<endl;
+		return;
+	}
+	returnSurface = SDL_ConvertSurfaceFormat(newSurface,
+		SDL_PIXELFORMAT_RGB24, 0); // need to convert to RGB from RGBA
+	texWidth = returnSurface->w;
+	texHeight = returnSurface->h;
+	glActiveTexture(type);
+	glBindTexture(GL_TEXTURE_2D, texHandle);
+	//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth,
+	//                 texHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, &pixData[0]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth,
+					texHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, returnSurface->pixels);
+	SDL_FreeSurface(newSurface);
+	checkGlErrors();
 }
 /*-----------------------------------------------*/
 static void loadCubeTexture(GLuint type, GLuint texHandle,
@@ -407,307 +692,374 @@ static void loadCubeTexture(GLuint type, GLuint texHandle,
                             const char *ppmFilename3, const char *ppmFilename4,
                             const char *ppmFilename5, const char *ppmFilename6)
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    int texWidth, texHeight;
-    vector<PackedPixel> pixData1, pixData2, pixData3,
-    pixData4, pixData5, pixData6;
+	int texWidth, texHeight;
+	vector<PackedPixel> pixData1, pixData2, pixData3,
+	pixData4, pixData5, pixData6;
 
-    ppmRead(ppmFilename1, texWidth, texHeight, pixData1);
-    ppmRead(ppmFilename2, texWidth, texHeight, pixData2);
-    ppmRead(ppmFilename3, texWidth, texHeight, pixData3);
-    ppmRead(ppmFilename4, texWidth, texHeight, pixData4);
-    ppmRead(ppmFilename5, texWidth, texHeight, pixData5);
-    ppmRead(ppmFilename6, texWidth, texHeight, pixData6);
-    glActiveTexture(type);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, texHandle);
+	ppmRead(ppmFilename1, texWidth, texHeight, pixData1);
+	ppmRead(ppmFilename2, texWidth, texHeight, pixData2);
+	ppmRead(ppmFilename3, texWidth, texHeight, pixData3);
+	ppmRead(ppmFilename4, texWidth, texHeight, pixData4);
+	ppmRead(ppmFilename5, texWidth, texHeight, pixData5);
+	ppmRead(ppmFilename6, texWidth, texHeight, pixData6);
+	glActiveTexture(type);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, texHandle);
 
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0,
-                 GL_RGB, texWidth, texHeight, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, &pixData1[0]);
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0,
-                 GL_RGB, texWidth, texHeight, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, &pixData2[0]);
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 0,
-                 GL_RGB, texWidth, texHeight, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, &pixData3[0]);
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, 0,
-                 GL_RGB, texWidth, texHeight, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, &pixData4[0]);
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 0,
-                 GL_RGB, texWidth, texHeight, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, &pixData5[0]);
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 0,
-                 GL_RGB, texWidth, texHeight, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, &pixData6[0]);
-    checkGlErrors();
+	glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0,
+					GL_RGB, texWidth, texHeight, 0,
+					GL_RGB, GL_UNSIGNED_BYTE, &pixData1[0]);
+	glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0,
+					GL_RGB, texWidth, texHeight, 0,
+					GL_RGB, GL_UNSIGNED_BYTE, &pixData2[0]);
+	glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 0,
+					GL_RGB, texWidth, texHeight, 0,
+					GL_RGB, GL_UNSIGNED_BYTE, &pixData3[0]);
+	glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, 0,
+					GL_RGB, texWidth, texHeight, 0,
+					GL_RGB, GL_UNSIGNED_BYTE, &pixData4[0]);
+	glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 0,
+					GL_RGB, texWidth, texHeight, 0,
+					GL_RGB, GL_UNSIGNED_BYTE, &pixData5[0]);
+	glTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 0,
+					GL_RGB, texWidth, texHeight, 0,
+					GL_RGB, GL_UNSIGNED_BYTE, &pixData6[0]);
+	checkGlErrors();
 }
 /*-----------------------------------------------*/
 static void loadSphereNormalTexture(GLuint type, GLuint texHandle)
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    int width = 512, height = 512;
-    vector<PackedPixel> pixels;
-    float x = 0;
-    float y = 0;
-    float z = 0;
+	int width = 512, height = 512;
+	vector<PackedPixel> pixels;
+	float x = 0;
+	float y = 0;
+	float z = 0;
 	float squareRootThree = sqrt((float) 3);
-    float invRootThree = 1/squareRootThree;
+	float invRootThree = 1/squareRootThree;
 
-    pixels.resize(width * height);
-    for (int row = height - 1; row >= 0; row--) {
-        for (int l = 0; l < width; l++) {
-            PackedPixel &p = pixels[row * width + l];
-            x = invRootThree * ((float)(row - width/2)/(width/2));
-            y = invRootThree * ((float)(l - height/2)/(height/2));
-            z = sqrt(1 - x*x - y*y);
-            p.r = (unsigned char)(255 * (x + 1)/2);
-            p.g = (unsigned char)(255 * (y + 1)/2);
-            p.b = (unsigned char)(255 * (z + 1)/2);
-        }
-    }
+	pixels.resize(width * height);
+	for (int row = height - 1; row >= 0; row--) 
+	{
+		for (int l = 0; l < width; l++) 
+		{
+			PackedPixel &p = pixels[row * width + l];
+			x = invRootThree * ((float)(row - width/2)/(width/2));
+			y = invRootThree * ((float)(l - height/2)/(height/2));
+			z = sqrt(1 - x*x - y*y);
+			p.r = (unsigned char)(255 * (x + 1)/2);
+			p.g = (unsigned char)(255 * (y + 1)/2);
+			p.b = (unsigned char)(255 * (z + 1)/2);
+		}
+	}
 
-    glActiveTexture(type);
-    glBindTexture(GL_TEXTURE_2D, texHandle);
-    glTexImage2D(GL_TEXTURE_2D, 0, G_GL2_COMPATIBLE ? GL_RGB : GL_SRGB, width,
-                 height, 0, GL_RGB, GL_UNSIGNED_BYTE, &pixels[0]);
-    checkGlErrors();
+	glActiveTexture(type);
+	glBindTexture(GL_TEXTURE_2D, texHandle);
+	glTexImage2D(GL_TEXTURE_2D, 0, G_GL2_COMPATIBLE ? GL_RGB : GL_SRGB, width,
+					height, 0, GL_RGB, GL_UNSIGNED_BYTE, &pixels[0]);
+	checkGlErrors();
 }
 /*-----------------------------------------------*/
 static void initTextures() 
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    g_tex0.reset(new GlTexture());
+	g_tex0.reset(new GlTexture());
 
-    loadTexture(GL_TEXTURE0, *g_tex0, "./MyPhoto.png");
+	loadTexture(GL_TEXTURE0, *g_tex0, "./Images/MyPhoto.png");
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, *g_tex0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, *g_tex0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 
-    g_tex1.reset(new GlTexture());
+	g_tex1.reset(new GlTexture());
 
-    loadSphereNormalTexture(GL_TEXTURE1, *g_tex1);
+	loadSphereNormalTexture(GL_TEXTURE1, *g_tex1);
 
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, *g_tex1);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, *g_tex1);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
     
-    g_tex2.reset(new GlTexture());
+	g_tex2.reset(new GlTexture());
     
-    loadCubeTexture(GL_TEXTURE2, *g_tex2, "./one.ppm", "./two.ppm",
-                    "./three.ppm", "./four.ppm", "./five.ppm", "./six.ppm");
+	loadCubeTexture(GL_TEXTURE2, *g_tex2, "./Images/one.ppm", "./Images/two.ppm",
+						"./Images/three.ppm", "./Images/four.ppm", "./Images/five.ppm", "./Images/six.ppm");
     
-    glEnable(GL_TEXTURE_CUBE_MAP);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, *g_tex2);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+	glEnable(GL_TEXTURE_CUBE_MAP);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, *g_tex2);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 }
 /*-----------------------------------------------*/
 static void drawStuff()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-    // short hand for current shader state
-    const ShaderState& curSS = *g_shaderStates[g_activeShader];
+	// short hand for current shader state
+	const ShaderState& curSS = *g_shaderStates[g_activeShader];
 
-    // build & send proj. matrix to vshader
-    const Matrix4 projmat = makeProjectionMatrix();
-    sendProjectionMatrix(curSS, projmat);
+	// build & send proj. matrix to vshader
+	const Matrix4 projmat = makeProjectionMatrix();
+	sendProjectionMatrix(curSS, projmat);
 
-    // use the skyRbt as the eyeRbt
-    const Matrix4 eyeRbt = g_skyRbt;
-    const Matrix4 invEyeRbt = inv(eyeRbt);
+	// use the skyRbt as the eyeRbt
+	//const Matrix4 eyeRbt = g_skyRbt;
+	const RigTForm invEyeRbt = inv(g_eyeRbt);
 
-    const Cvec3 eyeLight1 = Cvec3(invEyeRbt * Cvec4(G_LIGHT1, 1));
-    // G_LIGHT1 position in eye coordinates
+	const Cvec3 eyeLight1 = Cvec3(invEyeRbt * Cvec4(g_light1, 1));
+	const Cvec3 eyeLight2 = Cvec3(invEyeRbt * Cvec4(g_light2, 1)); // g_light2 position in eye coordinates
+	// G_LIGHT1 position in eye coordinates
 
-    safe_glUniform3f(curSS.h_uLight, (GLfloat) eyeLight1[0], (GLfloat) eyeLight1[1], (GLfloat) eyeLight1[2]);
+	safe_glUniform3f(curSS.h_uLight, (GLfloat) eyeLight1[0], (GLfloat) eyeLight1[1], (GLfloat) eyeLight1[2]);
+	safe_glUniform3f(curSS.h_uLight2, (GLfloat) eyeLight2[0], (GLfloat) eyeLight2[1], (GLfloat) eyeLight2[2]);
 
-    safe_glUniform1i(curSS.h_uTexUnit0, 0);
-    safe_glUniform1i(curSS.h_uTexUnit1, 1);
-    safe_glUniform1i(curSS.h_uTexUnit2, 2);
+	safe_glUniform1i(curSS.h_uTexUnit0, 0);
+	safe_glUniform1i(curSS.h_uTexUnit1, 1);
+	safe_glUniform1i(curSS.h_uTexUnit2, 2);
 
-    const Matrix4 groundRbt = Matrix4();  // identity
-    Matrix4 MVM = invEyeRbt * groundRbt;
-    Matrix4 NMVM = normalMatrix(MVM);
-    // draw cubes
-    // ==========
-    MVM = invEyeRbt * g_objectRbt[0];
-    NMVM = normalMatrix(MVM);
-    sendModelViewNormalMatrix(curSS, MVM, NMVM);
-    g_cube->draw(curSS);
+	// Draw Ground
+	const RigTForm groundRbt = RigTForm();  // identity
+	Matrix4 MVM = RigTForm::makeTRmatrix(invEyeRbt * groundRbt, Matrix4());
+	Matrix4 NMVM = normalMatrix(MVM);
+	sendModelViewNormalMatrix(curSS, MVM, NMVM);
+	safe_glUniform3f(curSS.h_uColor, (GLfloat) 0.1, (GLfloat) 0.95, (GLfloat) 0.1); // set color
+	g_ground->draw(curSS);
+
+	// Draw all Rigid body objects
+	for (int i = 0; i < G_NUM_OF_OBJECTS; i++)
+		g_rigidBodies[i].drawRigidBody(invEyeRbt);
+}
+/*-----------------------------------------------*/
+static const ShaderState& setupShader(int material)
+{
+	/*	PURPOSE:		Sets up Shader based on material 
+		RECEIVES:	material - enum value of shader to be used 
+		RETURNS:		curSS - ShaderState to be used to draw object
+		REMARKS:		 
+	*/
+
+	// Current Shader State
+	glUseProgram(g_shaderStates[material]->program);
+	const ShaderState& curSS = *g_shaderStates[material];
+
+	// Build & send proj. matrix to vshader
+	const Matrix4 projmat = makeProjectionMatrix();
+	sendProjectionMatrix(curSS, projmat);
+
+	// Use the g_eyeRbt as the eyeRbt;
+	const RigTForm eyeRbt = g_eyeRbt;
+	const RigTForm invEyeRbt = inv(eyeRbt);
+
+	const Cvec3 eyeLight1 = Cvec3(invEyeRbt * Cvec4(g_light1, 1)); // g_light1 position in eye coordinates
+	const Cvec3 eyeLight2 = Cvec3(invEyeRbt * Cvec4(g_light2, 1)); // g_light2 position in eye coordinates
+	safe_glUniform3f(curSS.h_uLight, (GLfloat) eyeLight1[0], (GLfloat) eyeLight1[1], (GLfloat) eyeLight1[2]);
+	safe_glUniform3f(curSS.h_uLight2, (GLfloat) eyeLight2[0], (GLfloat) eyeLight2[1], (GLfloat) eyeLight2[2]);
+
+	const RigTForm identityRbt = RigTForm();
+	Matrix4 MVM = RigTForm::makeTRmatrix(invEyeRbt * identityRbt, Matrix4());
+	Matrix4 NMVM = normalMatrix(MVM);
+
+	sendModelViewNormalMatrix(curSS, MVM, NMVM);
+
+	return curSS;
+}
+/*-----------------------------------------------*/
+static void reshape(const int w, const int h) 
+{
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
+	*/
+
+	g_windowWidth = w;
+	g_windowHeight = h;
+	glViewport(0, 0, w, h);
+	cerr << "Size of window is now " << w << "x" << h << endl;
+	updateFrustFovY();
 }
 /*-----------------------------------------------*/
 void MySdlApplication::keyboard()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-	if (KB_STATE[ SDL_SCANCODE_L ])
+	if (KB_STATE[SDL_SCANCODE_L])
 	{
 	}
-	else if (KB_STATE[ SDL_SCANCODE_R ])
+	else if (KB_STATE[SDL_SCANCODE_R])
 	{
 	}
-	else if (KB_STATE[ SDL_SCANCODE_O ])
+	else if (KB_STATE[SDL_SCANCODE_O])
 	{
 	}
-	else if (KB_STATE[ SDL_SCANCODE_P ])
+	else if (KB_STATE[SDL_SCANCODE_P])
 	{
 	}
-	else if (KB_STATE[ SDL_SCANCODE_T ])
+	else if (KB_STATE[SDL_SCANCODE_T] && !kbPrevState[SDL_SCANCODE_T])
 	{
 		g_activeShader++;
         if(g_activeShader >= G_NUM_SHADERS)
             g_activeShader = 0;
 	}
+	else if (KB_STATE[SDL_SCANCODE_ESCAPE])
+	{
+		running = false;
+	}
 }
 /*-----------------------------------------------*/
 void MySdlApplication::mouse(SDL_MouseButtonEvent button)
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	g_mouseClickX = button.x;
-    g_mouseClickY = G_WINDOW_HEIGHT - button.y - 1;
+	g_mouseClickY = g_windowHeight - button.y - 1;
 
-    g_mouseLClickButton |= (button.button == SDL_BUTTON_LEFT &&
-                            button.state == SDL_PRESSED);
-    g_mouseRClickButton |= (button.button == SDL_BUTTON_RIGHT &&
-                            button.state == SDL_PRESSED);
-    g_mouseMClickButton |= (button.button == SDL_BUTTON_MIDDLE &&
-                            button.state == SDL_PRESSED);
+	g_mouseLClickButton |= (button.button == SDL_BUTTON_LEFT &&
+									button.state == SDL_PRESSED);
+	g_mouseRClickButton |= (button.button == SDL_BUTTON_RIGHT &&
+									button.state == SDL_PRESSED);
+	g_mouseMClickButton |= (button.button == SDL_BUTTON_MIDDLE &&
+									button.state == SDL_PRESSED);
 
-    g_mouseLClickButton &= !(button.button == SDL_BUTTON_LEFT &&
-                            button.state == SDL_RELEASED);
-    g_mouseRClickButton &= !(button.button == SDL_BUTTON_RIGHT &&
-                             button.state == SDL_RELEASED);
-    g_mouseMClickButton &= !(button.button == SDL_BUTTON_MIDDLE &&
-                             button.state == SDL_RELEASED);
+	g_mouseLClickButton &= !(button.button == SDL_BUTTON_LEFT &&
+									button.state == SDL_RELEASED);
+	g_mouseRClickButton &= !(button.button == SDL_BUTTON_RIGHT &&
+									button.state == SDL_RELEASED);
+	g_mouseMClickButton &= !(button.button == SDL_BUTTON_MIDDLE &&
+									button.state == SDL_RELEASED);
 
-    g_mouseClickDown = g_mouseLClickButton || g_mouseRClickButton ||
-        g_mouseMClickButton;
+	g_mouseClickDown = g_mouseLClickButton || g_mouseRClickButton ||
+		g_mouseMClickButton;
 }
 /*-----------------------------------------------*/
 void MySdlApplication::motion(const int x, const int y)
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	const double dx = x - g_mouseClickX;
-    const double dy = G_WINDOW_HEIGHT - y - 1 - g_mouseClickY;
+	const double dy = g_windowHeight - y - 1 - g_mouseClickY;
 
-    Matrix4 m;
-    if (g_mouseLClickButton && !g_mouseRClickButton) {
-        // left button down?
-        m = Matrix4::makeXRotation(-dy) * Matrix4::makeYRotation(dx);
-    } else if (g_mouseRClickButton && !g_mouseLClickButton) {
-        // right button down?
-        m = Matrix4::makeTranslation(Cvec3(dx, dy, 0) * 0.01);
-    } else if (g_mouseMClickButton ||
-               (g_mouseLClickButton && g_mouseRClickButton)) {
-        // middle or (left and right) button down?
-        m = Matrix4::makeTranslation(Cvec3(0, 0, -dy) * 0.01);
-    }
+	RigTForm m;
+	if (g_mouseLClickButton && !g_mouseRClickButton) 
+	{
+		// left button down?
+		//m = g_eyeRbt * RigTForm(Quat().makeXRotation(-dy)) * RigTForm(Quat().makeYRotation(dx)) * inv(g_eyeRbt);
+		m = g_rigidBodies[0].rtf * RigTForm(Quat().makeXRotation(-dy)) * RigTForm(Quat().makeYRotation(dx)) * inv(g_rigidBodies[0].rtf);
+	}
+	else if (g_mouseRClickButton && !g_mouseLClickButton) 
+	{
+		// right button down?
+		m = g_eyeRbt * RigTForm(Cvec3(dx, dy, 0) * 0.01) * inv(g_eyeRbt);
+	}
+	else if (g_mouseMClickButton || (g_mouseLClickButton && g_mouseRClickButton)) 
+	{
+		// middle or (left and right) button down?
+		//m = RigTForm(Cvec3(0, 0, -dy) * 0.01);
+		m = g_eyeRbt * RigTForm(Cvec3(0, 0,dy) * 0.01) * inv(g_eyeRbt);
+	}
 
-    if (g_mouseClickDown) {
-        g_objectRbt[0] *= m; // Simply right-multiply is WRONG
-    }
+	if (g_mouseClickDown) 
+		g_rigidBodies[0].rtf = m * g_rigidBodies[0].rtf;
 
-    g_mouseClickX = x;
-    g_mouseClickY = G_WINDOW_HEIGHT - y - 1;
+	g_mouseClickX = x;
+	g_mouseClickY = g_windowHeight - y - 1;
+
 }
 /*-----------------------------------------------*/
 void MySdlApplication::onLoop()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	// Logic goes here
-	memcpy (kbPrevState, KB_STATE, sizeof( kbPrevState ));
 	keyboard();
 }
 /*-----------------------------------------------*/
 void MySdlApplication::onRender()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	// All draw calls go here
 	glUseProgram(g_shaderStates[g_activeShader]->program);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    // clear framebuffer color&depth
-    drawStuff();
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// clear framebuffer color&depth
+	drawStuff();
 
 	SDL_GL_SwapWindow(display);
 	checkGlErrors();
@@ -715,68 +1067,72 @@ void MySdlApplication::onRender()
 /*-----------------------------------------------*/
 int MySdlApplication::onExecute()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
-	if(onInit() == false) {
-        return -1;
-    }
-    SDL_Event Event;
-    while(running) {
-        while(SDL_PollEvent(&Event)) {
-            onEvent(&Event);
-        }
+	if(onInit() == false) 
+		return -1;
+	
+	SDL_Event Event;
+	while(running) 
+	{
+		memcpy (kbPrevState, KB_STATE, sizeof( kbPrevState ));
+        
+		while(SDL_PollEvent(&Event)) 
+		{
+			onEvent(&Event);
+		}
 
-        onLoop();
-        onRender();
-    }
+		onLoop();
+		onRender();
+	}
 
-    onCleanup();
+	onCleanup();
 
-    return 0;
+	return 0;
 }
 /*-----------------------------------------------*/
 bool MySdlApplication::onInit()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 	
-	if(SDL_Init(SDL_INIT_EVERYTHING) < 0) {
-        return false;
-    }
-    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+	if(SDL_Init(SDL_INIT_EVERYTHING) < 0) 
+	{
+		return false;
+   }
+	//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 
-    /* Turn on double buffering with a 24bit Z buffer.
-     * You may need to change this to 16 or 32 for your system */
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	/* Turn on double buffering with a 24bit Z buffer.
+	* You may need to change this to 16 or 32 for your system */
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    if((display = SDL_CreateWindow("My SDL Application",
-		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, G_WINDOW_WIDTH, G_WINDOW_HEIGHT,
-        SDL_WINDOW_OPENGL)) == NULL) {
-        return false;
-    }
+	if((display = SDL_CreateWindow("My SDL Application",
+	SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, g_windowWidth, g_windowHeight,
+		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE)) == NULL) 
+	{
+		return false;
+	}
 
-    /* Create our opengl context and attach it to our window */
-    SDL_GLContext maincontext = SDL_GL_CreateContext(display);
-    /* This makes our buffer swap syncronized with the 
-      monitor's vertical refresh */
-    SDL_GL_SetSwapInterval(1);
-
-	//glewExperimental = true;
+	/* Create our opengl context and attach it to our window */
+	SDL_GLContext maincontext = SDL_GL_CreateContext(display);
+	/* This makes our buffer swap syncronized with the 
+	monitor's vertical refresh */
+	SDL_GL_SetSwapInterval(1);
 
 	GLenum glewError = glewInit();
 	if( glewError != GLEW_OK ) 
@@ -790,35 +1146,35 @@ bool MySdlApplication::onInit()
 		return 1;
 	}
 	
-    cout << (G_GL2_COMPATIBLE ?
-        "Will use OpenGL 2.x / GLSL 1.0" : "Will use OpenGL 3.x / GLSL 1.3")
-        << endl;
-    if ((!G_GL2_COMPATIBLE) && !GLEW_VERSION_3_0)
-        throw runtime_error(
-            "Error: does not support OpenGL Shading Language v1.3");
-    else if (G_GL2_COMPATIBLE && !GLEW_VERSION_2_0)
-        throw runtime_error(
-            "Error: does not support OpenGL Shading Language v1.0");
+	cout << (G_GL2_COMPATIBLE ?
+		"Will use OpenGL 2.x / GLSL 1.0" : "Will use OpenGL 3.x / GLSL 1.3")
+		<< endl;
+	if ((!G_GL2_COMPATIBLE) && !GLEW_VERSION_3_0)
+		throw runtime_error(
+			"Error: does not support OpenGL Shading Language v1.3");
+	else if (G_GL2_COMPATIBLE && !GLEW_VERSION_2_0)
+		throw runtime_error(
+			"Error: does not support OpenGL Shading Language v1.0");
 
-    initGLState();
-    initShaders();
-    initGeometry();
-    initTextures();
+	initGLState();
+	initShaders();
+	initGeometry();
+	initTextures();
 
 	KB_STATE = SDL_GetKeyboardState(NULL);
 
-    return true;
+	return true;
 }
 /*-----------------------------------------------*/
 void MySdlApplication::onEvent(SDL_Event* event) 
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	Uint32 type = event->type;
@@ -831,17 +1187,20 @@ void MySdlApplication::onEvent(SDL_Event* event)
 		mouse(event->button);
 	else if (type == SDL_MOUSEMOTION)
 		motion(event->motion.x, event->motion.y);
+	else if (type == SDL_WINDOWEVENT)
+		if (event->window.event == SDL_WINDOWEVENT_RESIZED)
+			reshape(event->window.data1,event->window.data2);
 }
 /*-----------------------------------------------*/
 void MySdlApplication::onCleanup()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	SDL_Quit();
@@ -849,13 +1208,13 @@ void MySdlApplication::onCleanup()
 /*-----------------------------------------------*/
 MySdlApplication::MySdlApplication()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
 	*/
 
 	running = true;
@@ -885,11 +1244,11 @@ int main(int argc, const char* argv[])
 
 
 
-/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
-*/
+	/*	PURPOSE:		What does this function do? (must be present) 
+		RECEIVES:	List every argument name and explain each argument. 
+						(omit if the function has no arguments) 
+		RETURNS:		Explain the value returned by the function. 
+						(omit if the function returns no value) 
+		REMARKS:		Explain any special preconditions or postconditions. 
+						See example below. (omit if function is unremarkable) 
+	*/

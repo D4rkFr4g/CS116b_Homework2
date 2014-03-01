@@ -44,6 +44,12 @@
     <ClInclude Include="matrix4.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="rigtform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="quat.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="glew32.dll">
