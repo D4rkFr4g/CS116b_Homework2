@@ -94,6 +94,7 @@
     <None Include="Shaders\normal-gl3.fshader" />
     <None Include="Shaders\texture-gl2.fshader" />
     <None Include="Shaders\texture-gl3.fshader" />
+    <None Include="TODO.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

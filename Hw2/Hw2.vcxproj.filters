@@ -85,5 +85,8 @@
     <None Include="Shaders\texture-gl3.fshader">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="TODO.txt">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -38,6 +38,7 @@ static const ShaderState& setupShader(int material);
 enum {DIFFUSE, SOLID, TEXTURE, NORMAL, ANISOTROPY, CUBE};
 
 // Constants
+static const float G_CAM_ROTATION = 1;
 static const bool G_GL2_COMPATIBLE = false;
 static const float G_FRUST_MIN_FOV = 60.0;  //A minimal of 60 degree field of view
 static const unsigned char* KB_STATE = NULL;
@@ -466,6 +467,22 @@ static Geometry* initCube()
 	return new Geometry(&vtx[0], &idx[0], vbLen, ibLen);
 }
 /*-----------------------------------------------*/
+static Geometry* initSpheres() 
+{
+	int slices = 20;
+	int stacks = 20;
+	float radius = 1;
+	int ibLen, vbLen;
+	getSphereVbIbLen(slices, stacks, vbLen, ibLen);
+
+	// Temporary storage for cube geometry
+	vector<GenericVertex> vtx(vbLen);
+	vector<unsigned short> idx(ibLen);
+
+	makeSphere(radius, slices, stacks, vtx.begin(), idx.begin());
+	return new Geometry(&vtx[0], &idx[0], vbLen, ibLen);
+}
+/*-----------------------------------------------*/
 static RigidBody* buildCube()
 {
 	/*	PURPOSE:		Builds a cube object
@@ -507,6 +524,49 @@ static void initTextureCube()
 	RigidBody *cube;
 	cube = buildCube();
 	g_rigidBodies[0] = *cube;
+}
+/*-----------------------------------------------*/
+static RigidBody* buildEgg()
+{
+	/*	PURPOSE:		Builds a Egg object
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
+	*/
+
+	float width = 1;
+	float height = 1;
+	float thick = 1;
+
+	RigTForm rigTemp = RigTForm(Cvec3(0, 0, 0));
+	Matrix4 scaleTemp = Matrix4();
+
+	// Make container
+	RigidBody *container = new RigidBody(RigTForm(), Matrix4(), NULL, initCube(), Cvec3(0.5, 0.5, 0.5), DIFFUSE);
+	container->isVisible = false;
+	container->name = "container";
+
+	// Make Cube
+	rigTemp = RigTForm(Cvec3(0, 0, 0));
+	scaleTemp = Matrix4::makeScale(Cvec3(width, height, thick));	
+
+	RigidBody *egg = new RigidBody(rigTemp, scaleTemp, NULL, initSpheres(), Cvec3(1,0,0), TEXTURE);
+	egg->name = "egg";
+
+	//Setup Children
+	container->numOfChildren = 1;
+	container->children = new RigidBody*[container->numOfChildren];
+	container->children[0] = egg;
+
+	return container;
+
+}
+/*-----------------------------------------------*/
+static void initEgg()
+{
+	RigidBody *egg;
+	egg = buildEgg();
+	g_rigidBodies[0] = *egg;
 }
 /*-----------------------------------------------*/
 static void sendProjectionMatrix(const ShaderState& curSS,
@@ -568,6 +628,13 @@ static void updateFrustFovY()
 									/ (float) g_windowWidth,
 									(float) cos(G_FRUST_MIN_FOV * RAD_PER_DEG)) / RAD_PER_DEG;
 	}
+}
+/*-----------------------------------------------*/
+static void initCamera()
+{
+	Cvec3 eye = Cvec3(0.0, 2.0, 5.0);
+	g_skyRbt.setTranslation(eye);
+	g_eyeRbt = g_skyRbt;
 }
 /*-----------------------------------------------*/
 static Matrix4 makeProjectionMatrix()
@@ -648,7 +715,8 @@ static void initGeometry()
 						See example below. (omit if function is unremarkable) 
 	*/
 	initGround();
-	initTextureCube();
+	//initTextureCube();
+	initEgg();
 }
 /*-----------------------------------------------*/
 static void loadTexture(GLuint type, GLuint texHandle, const char *ppmFilename)
@@ -789,7 +857,7 @@ static void initTextures()
 
 	g_tex0.reset(new GlTexture());
 
-	loadTexture(GL_TEXTURE0, *g_tex0, "./Images/MyPhoto.png");
+	loadTexture(GL_TEXTURE0, *g_tex0, "./Images/cool_texture.png");
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, *g_tex0);
@@ -862,7 +930,8 @@ static void drawStuff()
 	Matrix4 NMVM = normalMatrix(MVM);
 	sendModelViewNormalMatrix(curSS, MVM, NMVM);
 	safe_glUniform3f(curSS.h_uColor, (GLfloat) 0.1, (GLfloat) 0.95, (GLfloat) 0.1); // set color
-	g_ground->draw(curSS);
+	if (g_ground != NULL)
+		g_ground->draw(curSS);
 
 	// Draw all Rigid body objects
 	for (int i = 0; i < G_NUM_OF_OBJECTS; i++)
@@ -934,9 +1003,17 @@ void MySdlApplication::keyboard()
 
 	if (KB_STATE[SDL_SCANCODE_L])
 	{
+		Cvec4 toOrigin = (Cvec4) -g_eyeRbt.getTranslation();
+		Cvec4 temp = Quat().makeYRotation(-G_CAM_ROTATION) * toOrigin;
+		g_eyeRbt.setRotation(g_eyeRbt.getRotation() * Quat().makeYRotation(-G_CAM_ROTATION));
+		g_eyeRbt.setTranslation((Cvec3) -temp);
 	}
 	else if (KB_STATE[SDL_SCANCODE_R])
 	{
+		Cvec4 toOrigin = (Cvec4) -g_eyeRbt.getTranslation();
+		Cvec4 temp = Quat().makeYRotation(G_CAM_ROTATION) * toOrigin;
+		g_eyeRbt.setRotation(g_eyeRbt.getRotation() * Quat().makeYRotation(G_CAM_ROTATION));
+		g_eyeRbt.setTranslation((Cvec3) -temp);
 	}
 	else if (KB_STATE[SDL_SCANCODE_O])
 	{
@@ -946,9 +1023,9 @@ void MySdlApplication::keyboard()
 	}
 	else if (KB_STATE[SDL_SCANCODE_T] && !kbPrevState[SDL_SCANCODE_T])
 	{
-		g_activeShader++;
-        if(g_activeShader >= G_NUM_SHADERS)
-            g_activeShader = 0;
+		g_rigidBodies[0].children[0]->material++;
+		if(g_rigidBodies[0].children[0]->material >= G_NUM_SHADERS) 
+			g_rigidBodies[0].children[0]->material = 0;
 	}
 	else if (KB_STATE[SDL_SCANCODE_ESCAPE])
 	{
@@ -1023,6 +1100,7 @@ void MySdlApplication::motion(const int x, const int y)
 
 	if (g_mouseClickDown) 
 		g_rigidBodies[0].rtf = m * g_rigidBodies[0].rtf;
+		//g_eyeRbt = m * g_eyeRbt;
 
 	g_mouseClickX = x;
 	g_mouseClickY = g_windowHeight - y - 1;
@@ -1160,6 +1238,7 @@ bool MySdlApplication::onInit()
 	initShaders();
 	initGeometry();
 	initTextures();
+	initCamera();
 
 	KB_STATE = SDL_GetKeyboardState(NULL);
 
