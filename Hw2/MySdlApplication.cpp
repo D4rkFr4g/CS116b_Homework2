@@ -79,6 +79,7 @@ static bool g_mouseClickDown = false;    // is the mouse button pressed
 static bool g_mouseLClickButton, g_mouseRClickButton, g_mouseMClickButton;
 static int g_mouseClickX, g_mouseClickY; // coordinates for mouse click event
 static int g_activeShader = 0;
+static bool g_isPopped = false;
 
 static float g_frustFovY = G_FRUST_MIN_FOV; // FOV in y direction
 
@@ -1015,11 +1016,30 @@ void MySdlApplication::keyboard()
 		g_eyeRbt.setRotation(g_eyeRbt.getRotation() * Quat().makeYRotation(G_CAM_ROTATION));
 		g_eyeRbt.setTranslation((Cvec3) -temp);
 	}
-	else if (KB_STATE[SDL_SCANCODE_O])
+	else if (KB_STATE[SDL_SCANCODE_O] && !kbPrevState[SDL_SCANCODE_O])
 	{
+		g_isPopped = false;
+
+		Matrix4 scaleTemp = Matrix4().makeScale(Cvec3(1.0, .955,1.0));
+		if (g_rigidBodies[0].scale[5] > 1.0)
+			g_rigidBodies[0].scale *= scaleTemp;
+
+		// Reset if too Low
+		if (g_rigidBodies[0].scale[5] < 1.0)
+			g_rigidBodies[0].scale[5] = 1.0;
 	}
-	else if (KB_STATE[SDL_SCANCODE_P])
+	else if (KB_STATE[SDL_SCANCODE_P] && !kbPrevState[SDL_SCANCODE_P])
 	{
+		Matrix4 scaleTemp = Matrix4().makeScale(Cvec3(1.0,1.045,1.0));
+		if (g_rigidBodies[0].scale[5] < 1.5)
+			g_rigidBodies[0].scale *= scaleTemp;
+
+		// Reset if too High
+		if (g_rigidBodies[0].scale[5] >= 1.5)
+		{
+			g_isPopped = true;
+			g_rigidBodies[0].scale[5] = 1.5;
+		}
 	}
 	else if (KB_STATE[SDL_SCANCODE_T] && !kbPrevState[SDL_SCANCODE_T])
 	{
