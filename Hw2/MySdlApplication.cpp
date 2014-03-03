@@ -1,7 +1,7 @@
 /****************************************************** 
 * Copyright (c):   2014, All Rights Reserved. 
 * Project:         CS 116B Homework #2
-* File:            main.cpp 
+* File:            MySdlAppliation.cpp 
 * Purpose:         Experiment with quadrics, fractals and SDL.
 * Start date:      2/23/14 
 * Programmer:      Zane Melcho, Jason Hungerford, Cesar Iñarrea
@@ -14,6 +14,8 @@
 #include <cmath>
 #include <memory>
 #include <stdexcept>
+#include <stdlib.h>
+#include <time.h>
 #if __GNUG__
 #	include <tr1/memory>
 #endif
@@ -33,6 +35,8 @@ using namespace tr1;
 struct RigidBody;
 struct ShaderState;
 static const ShaderState& setupShader(int material);
+static void fractal1(RigidBody *object, int iteration);
+static void fractal2(RigidBody *object, int iteration);
 
 // Enum
 enum {DIFFUSE, SOLID, TEXTURE, NORMAL, ANISOTROPY, CUBE};
@@ -42,7 +46,8 @@ static const float G_CAM_ROTATION = 1;
 static const bool G_GL2_COMPATIBLE = false;
 static const float G_FRUST_MIN_FOV = 60.0;  //A minimal of 60 degree field of view
 static const unsigned char* KB_STATE = NULL;
-static const int G_NUM_OF_OBJECTS = 1; //Number of objects to be drawn
+static const int G_NUM_OF_OBJECTS = 2; //Number of objects to be drawn
+static const int G_NUM_OF_FRACTAL_ITERATIONS = 5;
 
 static const int G_NUM_SHADERS = 6;
 static const char * const G_SHADER_FILES[G_NUM_SHADERS][2] = 
@@ -295,9 +300,11 @@ struct RigidBody
 			REMARKS:		 
 		*/
 
-		for (int i =0; i < numOfChildren; i++)
-			delete children[i];
-		delete []children;
+		for (int i = 0; i < numOfChildren; i++)
+		{
+			delete children[i];	
+		}
+		delete children;
 		delete geom;
 	}
 
@@ -466,6 +473,28 @@ static Geometry* initSpheres()
 	return new Geometry(&vtx[0], &idx[0], vbLen, ibLen);
 }
 /*-----------------------------------------------*/
+static Geometry* initCylinders()
+{
+	/*	PURPOSE:		Sets up index and vertex buffers and calls geometrymaker for a cylinder
+		RECEIVES:	 
+		RETURNS:		Geometry - returns Geometry object 
+		REMARKS:		 
+	*/
+
+	float radius = 1;
+	float height = 1;
+	int slices = 20;
+	int ibLen, vbLen;
+	getCylinderVbIbLen(slices, vbLen, ibLen);
+
+	// Temporary storage for cube geometry
+	vector<GenericVertex> vtx(vbLen);
+	vector<unsigned short> idx(ibLen);
+
+	makeCylinder(slices, radius, height, vtx.begin(), idx.begin());
+	return new Geometry(&vtx[0], &idx[0], vbLen, ibLen);
+}
+/*-----------------------------------------------*/
 static RigidBody* buildCube()
 {
 	/*	PURPOSE:		Builds a cube object
@@ -535,7 +564,7 @@ static RigidBody* buildEgg()
 	container->isVisible = false;
 	container->name = "container";
 
-	// Make Cube
+	// Make Egg
 	rigTemp = RigTForm(Cvec3(0, 0, 0));
 	scaleTemp = Matrix4::makeScale(Cvec3(width, height, thick));	
 
@@ -562,6 +591,150 @@ static void initEgg()
 	RigidBody *egg;
 	egg = buildEgg();
 	g_rigidBodies[0] = *egg;
+}
+/*-----------------------------------------------*/
+static RigidBody* buildPlant()
+{
+	/*	PURPOSE:		Builds a plant starter for Fractal function
+		RECEIVES:	 
+		RETURNS:		RigidBody - Returns RigidBody object containing a plant 
+		REMARKS:		plant is inside an invisible container object
+	*/
+
+	float width = 0.1f;
+	float height = 1.5f;
+	float thick = 0.1f;
+
+	RigTForm rigTemp = RigTForm(Cvec3(0, 0, 0));
+	Matrix4 scaleTemp = Matrix4();
+
+	// Make container
+	RigidBody *container = new RigidBody(RigTForm(), Matrix4(), NULL, initCube(), Cvec3(0.5, 0.5, 0.5), DIFFUSE);
+	container->isVisible = false;
+	container->name = "container";
+
+	// Make Plant
+	rigTemp = RigTForm(Cvec3(0, 0, 0));
+	scaleTemp = Matrix4::makeScale(Cvec3(width, height, thick));	
+
+	RigidBody *plant = new RigidBody(rigTemp, scaleTemp, NULL, initCylinders(), Cvec3(0,0.7,0), DIFFUSE);
+	plant->name = "plant";
+
+	//Setup Children
+	container->numOfChildren = 1;
+	container->children = new RigidBody*[container->numOfChildren];
+	container->children[0] = plant;
+
+	return container;
+
+}
+/*-----------------------------------------------*/
+static void initPlant()
+{
+	/*	PURPOSE:		Creates and addes a plant to the array of RigidBody objects
+		RECEIVES:	
+		RETURNS:		
+		REMARKS:		
+	*/
+
+	RigidBody *plant;
+	plant = buildPlant();
+	plant->isChildVisible = false;
+	g_rigidBodies[1] = *plant;
+}
+/*-----------------------------------------------*/
+static void flower(RigidBody* object)
+{
+	/*	PURPOSE:		Draws a flower texture at position of object
+		RECEIVES:	object - A RigidBody to be used for coordinates
+		RETURNS:		
+		REMARKS:		Recursive end function
+	*/
+
+	// Draw a plane and put a flower texture on it.
+}
+/*-----------------------------------------------*/
+static void fractalize(RigidBody *object)
+{
+	/*	PURPOSE:		Draws a RigidBody object in a fractal pattern
+		RECEIVES:	object - A RigidBody to be used in the fractal
+		RETURNS:		
+		REMARKS:		Recursive starter function
+	*/
+
+	// Make object visible & Save current size and shape
+	object->isChildVisible = true;
+	RigTForm tempRTF = object->rtf;
+	Matrix4 tempScale = object->scale;
+
+	// Draw current object
+	object->drawRigidBody(inv(g_eyeRbt));
+
+	// Start Fractal Recursion
+	int iteration = 0;
+
+	int randNum = rand() % 2;
+	if (randNum)
+		fractal1(object, iteration);
+	else
+		fractal2(object, iteration);
+
+	// Reset RigidBody Object
+	object->rtf = tempRTF;
+	object->scale = tempScale;
+	object->isChildVisible = false;
+}
+static void fractal1(RigidBody *object, int iteration)
+{
+	/*	PURPOSE:		Draws a RigidBody object in a fractal pattern
+		RECEIVES:	object - A RigidBody to be used in the fractal
+						iteration - Number of steps taken for fractal
+		RETURNS:		
+		REMARKS:		Recursive function
+	*/
+
+	if (iteration >= G_NUM_OF_FRACTAL_ITERATIONS)
+		flower(object);
+	else
+	{
+		// Fractal function
+
+
+		object->drawRigidBody(inv(g_eyeRbt));
+		// Recursive Call
+		iteration++;
+		int randNum = rand() % 2;
+		if (randNum)
+			fractal1(object, iteration);
+		else
+			fractal2(object, iteration);
+	}
+}
+static void fractal2(RigidBody *object, int iteration)
+{
+	/*	PURPOSE:		Draws a RigidBody object in a fractal pattern
+		RECEIVES:	object - A RigidBody to be used in the fractal
+						iteration - Number of steps taken for fractal
+		RETURNS:		
+		REMARKS:		Recursive function
+	*/
+
+	if (iteration >= G_NUM_OF_FRACTAL_ITERATIONS)
+		flower(object);
+	else
+	{
+		// Fractal function
+
+
+		object->drawRigidBody(inv(g_eyeRbt));
+		// Recursive Call
+		iteration++;
+		int randNum = rand() % 2;
+		if (randNum)
+			fractal1(object, iteration);
+		else
+			fractal2(object, iteration);
+	}
 }
 /*-----------------------------------------------*/
 static void sendProjectionMatrix(const ShaderState& curSS,
@@ -701,6 +874,7 @@ static void initGeometry()
 	initGround();
 	//initTextureCube();
 	initEgg();
+	initPlant();
 }
 /*-----------------------------------------------*/
 static void loadTexture(GLuint type, GLuint texHandle, const char *filename)
@@ -915,6 +1089,10 @@ static void drawStuff()
 	// Draw all Rigid body objects
 	for (int i = 0; i < G_NUM_OF_OBJECTS; i++)
 		g_rigidBodies[i].drawRigidBody(invEyeRbt);
+
+	// Draw Fractal plant
+	if (g_isPopped)
+		fractalize(&g_rigidBodies[1]);
 }
 /*-----------------------------------------------*/
 static const ShaderState& setupShader(int material)
@@ -1025,6 +1203,13 @@ void MySdlApplication::keyboard()
 	{
 		running = false;
 	}
+	else if (KB_STATE[SDL_SCANCODE_1] && !kbPrevState[SDL_SCANCODE_1])
+	{
+		if (g_rigidBodies[0].isChildVisible)
+			g_rigidBodies[0].isChildVisible = false;
+		else
+			g_rigidBodies[0].isChildVisible = true;
+	}
 }
 /*-----------------------------------------------*/
 void MySdlApplication::mouse(SDL_MouseButtonEvent button)
@@ -1133,6 +1318,8 @@ int MySdlApplication::onExecute()
 		RETURNS:		 
 		REMARKS:		 
 	*/
+
+	srand((unsigned int) time(NULL));
 
 	if(onInit() == false) 
 		return -1;
