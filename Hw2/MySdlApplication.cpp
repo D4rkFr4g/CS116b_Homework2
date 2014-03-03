@@ -1178,25 +1178,26 @@ void MySdlApplication::keyboard()
 	{
 		g_isPopped = false;
 
-		Matrix4 scaleTemp = Matrix4().makeScale(Cvec3(1.0, .955,1.0));
-		if (g_rigidBodies[0].scale[5] > 1.0)
+		Matrix4 scaleTemp = Matrix4().makeScale(Cvec3(1.0,1.045,1.0));
+		if (g_rigidBodies[0].scale[5] < 1.0)
 			g_rigidBodies[0].scale *= scaleTemp;
 
-		// Reset if too Low
-		if (g_rigidBodies[0].scale[5] < 1.0)
+		// Reset if too High
+		if (g_rigidBodies[0].scale[5] >= 1.0)
 			g_rigidBodies[0].scale[5] = 1.0;
 	}
 	else if (KB_STATE[SDL_SCANCODE_P] && !kbPrevState[SDL_SCANCODE_P])
 	{
-		Matrix4 scaleTemp = Matrix4().makeScale(Cvec3(1.0,1.045,1.0));
-		if (g_rigidBodies[0].scale[5] < 1.5)
+		Matrix4 scaleTemp = Matrix4().makeScale(Cvec3(1.0,0.955,1.0));
+		if (g_rigidBodies[0].scale[5] > 0.5)
 			g_rigidBodies[0].scale *= scaleTemp;
 
-		// Reset if too High
-		if (g_rigidBodies[0].scale[5] >= 1.5)
+		// Reset if too Low
+		if (g_rigidBodies[0].scale[5] < 0.5)
 		{
-			g_isPopped = true;
-			g_rigidBodies[0].scale[5] = 1.5;
+			if (!g_isPopped)
+				g_isPopped = true;
+			g_rigidBodies[0].scale[5] = 0.5;
 
 			// Initialize fractal Pattern
 			for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
