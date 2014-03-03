@@ -125,13 +125,11 @@ struct ShaderState
 	/*-----------------------------------------------*/
 	ShaderState(const char* vsfn, const char* fsfn) 
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Constructor for ShaderState Object 
+			RECEIVES:	vsfn - Vertex Shader Filename
+							fsfn - Fragement Shader Filename
+			RETURNS:		ShaderState object
+			REMARKS:		
 		*/
 
 		readAndCompileShader(program, vsfn, fsfn);
@@ -171,14 +169,15 @@ struct Geometry
 	/*-----------------------------------------------*/
 	Geometry(GenericVertex *vtx, unsigned short *idx, int vboLen, int iboLen)
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Constructor for Geometry Object 
+			RECEIVES:	vtx - vertex buffer array of Generic vertex
+							idx - Index buffer array
+							vboLen - Length of Vertex buffer array
+							iboLen - Length of Index Buffer array
+			RETURNS:		Geometry object
+			REMARKS:		 
 		*/
+
 		this->vboLen = vboLen;
 		this->iboLen = iboLen;
 
@@ -198,13 +197,10 @@ struct Geometry
 	/*-----------------------------------------------*/
 	void draw(const ShaderState& curSS)
     {
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Draws an OpenGL object 
+			RECEIVES:	curSS - ShaderState to be used when drawing 
+			RETURNS:		 
+			REMARKS:		 
 		*/
 
       // Enable the attributes used by our shader
@@ -239,13 +235,11 @@ struct Geometry
 	/*-----------------------------------------------*/
 	void draw(const ShaderState& curSS, Matrix4 MVM)
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Draws an OpenGL object with a specific Model View Matrix 
+			RECEIVES:	curSS - ShaderState to be used when drawing 
+							MVM - Model View Matrix to be drawn against 
+			RETURNS:		 
+			REMARKS:		 
 		*/
 
 		Matrix4 NMVM = normalMatrix(MVM);
@@ -276,13 +270,10 @@ struct RigidBody
 
 	RigidBody()
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Constructor for RigidBody object 
+			RECEIVES:	 
+			RETURNS:		RigidBody object 
+			REMARKS:		 
 		*/
 
 		rtf = RigTForm();
@@ -298,13 +289,10 @@ struct RigidBody
 
 	~RigidBody()
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Destructor for RigidBody object 
+			RECEIVES:	 
+			RETURNS:		 
+			REMARKS:		 
 		*/
 
 		for (int i =0; i < numOfChildren; i++)
@@ -315,13 +303,15 @@ struct RigidBody
 
 	RigidBody(RigTForm rtf_, Matrix4 scale_, RigidBody **children_, Geometry *geom_, Cvec3 color_, int material_)
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Constructor for RigidBody object 
+			RECEIVES:	rtf_ - RigTForm for the RigidBody
+							scale_ - Matrix representing RigidBody scale
+							children_ - Pointer to an array of Child RigidBody objects
+							geom_ - Geometry type of object
+							color_ - Color to draw object
+							material_ - Type of shader material to draw object with
+			RETURNS:		RigidBody object 
+			REMARKS:		 
 		*/
 
 		rtf = rtf_;
@@ -336,13 +326,10 @@ struct RigidBody
 
 	void drawRigidBody(RigTForm invEyeRbt)
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Draw the RigidBody object 
+			RECEIVES:	invEyeRbt -  Inverse Eye Frame to use
+			RETURNS:		 
+			REMARKS:		Recursive starter function
 		*/
 
 		RigTForm respectFrame = invEyeRbt;
@@ -351,13 +338,11 @@ struct RigidBody
 
 	void draw(RigTForm respectFrame_, Matrix4 respectScale_)
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Draws the RigidBody with respect to parent object 
+			RECEIVES:	respectFrame_ - Parent Object frame
+							respectScale_ - Parent Object scale
+			RETURNS:		 
+			REMARKS:		 Recursive function
 		*/
 
 		const ShaderState& curSS = setupShader(material);
@@ -387,13 +372,10 @@ struct RigidBody
 
 	void draw(Matrix4 respectFrame_)
 	{
-		/*	PURPOSE:		What does this function do? (must be present) 
-			RECEIVES:	List every argument name and explain each argument. 
-							(omit if the function has no arguments) 
-			RETURNS:		Explain the value returned by the function. 
-							(omit if the function returns no value) 
-			REMARKS:		Explain any special preconditions or postconditions. 
-							See example below. (omit if function is unremarkable) 
+		/*	PURPOSE:		Draws the RigidBody with respect to parent Frame 
+			RECEIVES:	respectFrame_ - Parent Object frame 
+			RETURNS:		 
+			REMARKS:		Recursive Function
 		*/
 
 		const ShaderState& curSS = setupShader(material);
@@ -425,13 +407,10 @@ static RigidBody g_rigidBodies[G_NUM_OF_OBJECTS]; // Array that holds each Rigid
 /*-----------------------------------------------*/
 static void initGround() 
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Buils the Generic Vertices for the ground 
+		RECEIVES:	
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	// A x-z plane at y = g_groundY of dimension [-g_groundSize, g_groundSize]^2
@@ -448,13 +427,10 @@ static void initGround()
 /*-----------------------------------------------*/
 static Geometry* initCube()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Sets up index and vertex buffers and calls geometrymaker for a cube 
+		RECEIVES:	 
+		RETURNS:		Geometry - returns Geometry object 
+		REMARKS:		 
 	*/
 
 	int ibLen, vbLen;
@@ -470,6 +446,12 @@ static Geometry* initCube()
 /*-----------------------------------------------*/
 static Geometry* initSpheres() 
 {
+	/*	PURPOSE:		Sets up index and vertex buffers and calls geometrymaker for a sphere
+		RECEIVES:	 
+		RETURNS:		Geometry - returns Geometry object 
+		REMARKS:		 
+	*/
+
 	int slices = 20;
 	int stacks = 20;
 	float radius = 1;
@@ -488,8 +470,8 @@ static RigidBody* buildCube()
 {
 	/*	PURPOSE:		Builds a cube object
 		RECEIVES:	 
-		RETURNS:		 
-		REMARKS:		 
+		RETURNS:		RigidBody - Returns RigidBody object containing a cube
+		REMARKS:		Cube is inside an invisible container object
 	*/
 
 	float width = 1;
@@ -522,6 +504,12 @@ static RigidBody* buildCube()
 /*-----------------------------------------------*/
 static void initTextureCube()
 {
+	/*	PURPOSE:		Creates and addes a textured cube to the array of RigidBody objects
+		RECEIVES:	
+		RETURNS:		
+		REMARKS:		
+	*/
+
 	RigidBody *cube;
 	cube = buildCube();
 	g_rigidBodies[0] = *cube;
@@ -531,8 +519,8 @@ static RigidBody* buildEgg()
 {
 	/*	PURPOSE:		Builds a Egg object
 		RECEIVES:	 
-		RETURNS:		 
-		REMARKS:		 
+		RETURNS:		RigidBody - Returns RigidBody object containing a cube 
+		REMARKS:		Egg is inside an invisible container object
 	*/
 
 	float width = 1;
@@ -565,6 +553,12 @@ static RigidBody* buildEgg()
 /*-----------------------------------------------*/
 static void initEgg()
 {
+	/*	PURPOSE:		Creates and addes a textured egg to the array of RigidBody objects
+		RECEIVES:	
+		RETURNS:		
+		REMARKS:		
+	*/
+
 	RigidBody *egg;
 	egg = buildEgg();
 	g_rigidBodies[0] = *egg;
@@ -573,13 +567,11 @@ static void initEgg()
 static void sendProjectionMatrix(const ShaderState& curSS,
                                  const Matrix4& projMatrix)
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Sends projection matrix to OpenGL for shader use 
+		RECEIVES:	curSS - The current ShaderState to be used for drawing
+						projMatrix - The projection matrix to be used
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	// takes a projection matrix and send to the the shaders
@@ -591,13 +583,12 @@ static void sendProjectionMatrix(const ShaderState& curSS,
 static void sendModelViewNormalMatrix(const ShaderState& curSS,
                                       const Matrix4& MVM, const Matrix4& NMVM)
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Sends the regular and normal Model View Matrix to OpenGL for shader use
+		RECEIVES:	curSS -	The current shader state to be used to draw 
+						MVM -		The model view matrix to be used
+						NMVM -	The normal model view matrix to be used
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	// takes MVM and its normal matrix to the shaders
@@ -611,13 +602,10 @@ static void sendModelViewNormalMatrix(const ShaderState& curSS,
 /*-----------------------------------------------*/
 static void updateFrustFovY()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Updates the Frustum field of view 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	if (g_windowWidth >= g_windowHeight)
@@ -633,6 +621,12 @@ static void updateFrustFovY()
 /*-----------------------------------------------*/
 static void initCamera()
 {
+	/*	PURPOSE:		Initializes the camera position
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
+	*/
+
 	Cvec3 eye = Cvec3(0.0, 2.0, 5.0);
 	g_skyRbt.setTranslation(eye);
 	g_eyeRbt = g_skyRbt;
@@ -640,13 +634,10 @@ static void initCamera()
 /*-----------------------------------------------*/
 static Matrix4 makeProjectionMatrix()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Builds a projection matrix for the scene 
+		RECEIVES:	 
+		RETURNS:		Matrix4 - Matrix corresponding to the Projection 
+		REMARKS:		 
 	*/
 
 	return Matrix4::makeProjection(g_frustFovY,
@@ -656,13 +647,10 @@ static Matrix4 makeProjectionMatrix()
 /*-----------------------------------------------*/
 static void initGLState()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Initializes OpenGL 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	glClearColor((GLclampf)(128./255.), (GLclampf) (200./255.), (GLclampf) (255./255.), (GLclampf) 0.);
@@ -680,13 +668,10 @@ static void initGLState()
 /*-----------------------------------------------*/
 static void initShaders()
 {
-	/* PURPOSE:      What does this function do? (must be present) 
-   RECEIVES:   List every argument name and explain each argument. 
-               (omit if the function has no arguments) 
-   RETURNS:      Explain the value returned by the function. 
-               (omit if the function returns no value) 
-   REMARKS:      Explain any special preconditions or postconditions. 
-               See example below. (omit if function is unremarkable) 
+	/* PURPOSE:		Initializes Shaders to be used 
+		RECEIVES:	 
+		RETURNS:     
+		REMARKS:     
 	*/
 
 	g_shaderStates.resize(G_NUM_SHADERS);
@@ -707,35 +692,32 @@ static void initShaders()
 /*-----------------------------------------------*/
 static void initGeometry()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Initializes all Geometry objects to be drawn
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
+
 	initGround();
 	//initTextureCube();
 	initEgg();
 }
 /*-----------------------------------------------*/
-static void loadTexture(GLuint type, GLuint texHandle, const char *ppmFilename)
+static void loadTexture(GLuint type, GLuint texHandle, const char *filename)
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Load a texture to use in SDL 
+		RECEIVES:	type - Type of texture to load
+						texHandle - OpenGL handle to texture
+						filename - texture file to load
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	int texWidth, texHeight;
 	vector<PackedPixel> pixData;
 
-	//    ppmRead(ppmFilename, texWidth, texHeight, pixData);
-	SDL_Surface* newSurface = IMG_Load(ppmFilename); // read in image
+	//    ppmRead(filename, texWidth, texHeight, pixData);
+	SDL_Surface* newSurface = IMG_Load(filename); // read in image
 	SDL_Surface* returnSurface;
 	if(newSurface == NULL) 
 	{
@@ -761,13 +743,17 @@ static void loadCubeTexture(GLuint type, GLuint texHandle,
                             const char *ppmFilename3, const char *ppmFilename4,
                             const char *ppmFilename5, const char *ppmFilename6)
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Loads textures necessary for a cube map 
+		RECEIVES:	type - Type of texture to load
+						texHandle - OpenGL handle to texture
+						ppmFilename1 - First face texture to load
+						ppmFilename2 - Second face texture to load
+						ppmFilename3 - Third face texture to load
+						ppmFilename4 - Fourth face texture to load
+						ppmFilename5 - Fifth face texture to load
+						ppmFilename6 - Sixth face texture to load
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	int texWidth, texHeight;
@@ -806,13 +792,11 @@ static void loadCubeTexture(GLuint type, GLuint texHandle,
 /*-----------------------------------------------*/
 static void loadSphereNormalTexture(GLuint type, GLuint texHandle)
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Creates textures to be used for a normal map 
+		RECEIVES:	type - The type of texture
+						texHandle - OpenGL handl to texture
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	int width = 512, height = 512;
@@ -847,13 +831,10 @@ static void loadSphereNormalTexture(GLuint type, GLuint texHandle)
 /*-----------------------------------------------*/
 static void initTextures() 
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Initializes all textures to use with OpenGL 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	g_tex0.reset(new GlTexture());
@@ -894,13 +875,10 @@ static void initTextures()
 /*-----------------------------------------------*/
 static void drawStuff()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Draws all objects 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	// short hand for current shader state
@@ -975,13 +953,11 @@ static const ShaderState& setupShader(int material)
 /*-----------------------------------------------*/
 static void reshape(const int w, const int h) 
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Resizes everything based on new window dimensions 
+		RECEIVES:	w - Width of window
+						h - Height of window
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	g_windowWidth = w;
@@ -993,13 +969,11 @@ static void reshape(const int w, const int h)
 /*-----------------------------------------------*/
 void MySdlApplication::keyboard()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Handles all keyboard inputs 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		Uses KB_STATE and kbPrevState to evaluate which keys are pressed or held down 
+						 
 	*/
 
 	if (KB_STATE[SDL_SCANCODE_L])
@@ -1055,13 +1029,10 @@ void MySdlApplication::keyboard()
 /*-----------------------------------------------*/
 void MySdlApplication::mouse(SDL_MouseButtonEvent button)
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Handles MouseButton events to set mouse related variables 
+		RECEIVES:	button - MouseButtonEvent object that has current state of Mouse 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	g_mouseClickX = button.x;
@@ -1087,13 +1058,11 @@ void MySdlApplication::mouse(SDL_MouseButtonEvent button)
 /*-----------------------------------------------*/
 void MySdlApplication::motion(const int x, const int y)
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Handles all Mouse related input 
+		RECEIVES:	x - x position of the mouse in screen Coordinates
+						y - y position of the mouse in screen Coordinates
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	const double dx = x - g_mouseClickX;
@@ -1129,13 +1098,10 @@ void MySdlApplication::motion(const int x, const int y)
 /*-----------------------------------------------*/
 void MySdlApplication::onLoop()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Handles function calls that need to run once per SDL loop 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	// Logic goes here
@@ -1144,13 +1110,10 @@ void MySdlApplication::onLoop()
 /*-----------------------------------------------*/
 void MySdlApplication::onRender()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Handles all graphics related calls once per SDL loop 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	// All draw calls go here
@@ -1165,13 +1128,10 @@ void MySdlApplication::onRender()
 /*-----------------------------------------------*/
 int MySdlApplication::onExecute()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Main function loop of MySdlApplication 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	if(onInit() == false) 
@@ -1198,20 +1158,17 @@ int MySdlApplication::onExecute()
 /*-----------------------------------------------*/
 bool MySdlApplication::onInit()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Initializes SDL 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 	
 	if(SDL_Init(SDL_INIT_EVERYTHING) < 0) 
 	{
 		return false;
    }
-	//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 
 	/* Turn on double buffering with a 24bit Z buffer.
@@ -1267,13 +1224,10 @@ bool MySdlApplication::onInit()
 /*-----------------------------------------------*/
 void MySdlApplication::onEvent(SDL_Event* event) 
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Handles SDL events 
+		RECEIVES:	event - SDL Event to be handled 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	Uint32 type = event->type;
@@ -1293,13 +1247,10 @@ void MySdlApplication::onEvent(SDL_Event* event)
 /*-----------------------------------------------*/
 void MySdlApplication::onCleanup()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Everything to be done before program closes 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	SDL_Quit();
@@ -1307,13 +1258,10 @@ void MySdlApplication::onCleanup()
 /*-----------------------------------------------*/
 MySdlApplication::MySdlApplication()
 {
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
+	/*	PURPOSE:		Constructor for MySdlApplication 
+		RECEIVES:	 
+		RETURNS:		 
+		REMARKS:		 
 	*/
 
 	running = true;
@@ -1321,6 +1269,13 @@ MySdlApplication::MySdlApplication()
 /*-----------------------------------------------*/
 int main(int argc, const char* argv[])
 {	
+	/*	PURPOSE:		Main function of MySdlApplication 
+		RECEIVES:	argc - number of arguments passed
+						argv - array of arguments
+		RETURNS:		int - Whether or not program ran sucessfully
+		REMARKS:		
+	*/
+
 	MySdlApplication application;
 	return application.onExecute();
 }
