@@ -85,6 +85,7 @@ static bool g_mouseLClickButton, g_mouseRClickButton, g_mouseMClickButton;
 static int g_mouseClickX, g_mouseClickY; // coordinates for mouse click event
 static int g_activeShader = 0;
 static bool g_isPopped = false;
+int g_fractalPattern[G_NUM_OF_FRACTAL_ITERATIONS] = {0};
 
 static float g_frustFovY = G_FRUST_MIN_FOV; // FOV in y direction
 
@@ -673,8 +674,7 @@ static void fractalize(RigidBody *object)
 	// Start Fractal Recursion
 	int iteration = 0;
 
-	int randNum = rand() % 2;
-	if (randNum)
+	if (g_fractalPattern[iteration])
 		fractal1(object, iteration);
 	else
 		fractal2(object, iteration);
@@ -698,13 +698,20 @@ static void fractal1(RigidBody *object, int iteration)
 	else
 	{
 		// Fractal function
-
+		object->scale *= Matrix4().makeScale(Cvec3(0.5,0.5,0.5));
+		object->rtf.setRotation(object->rtf.getRotation() * Quat().makeZRotation(15));
+		
+		Cvec3 temp = object->rtf.getTranslation();
+		float xScale = object->scale[0];
+		float yScale = object->scale[5];
+		temp[0] = temp[0] - abs(xScale * 0.3); // Move a scaled amount left
+		temp[1] = temp[1] + abs(yScale * 1.0); // Move a scaled amount up
+		object->rtf.setTranslation(temp);
 
 		object->drawRigidBody(inv(g_eyeRbt));
 		// Recursive Call
 		iteration++;
-		int randNum = rand() % 2;
-		if (randNum)
+		if (g_fractalPattern[iteration])
 			fractal1(object, iteration);
 		else
 			fractal2(object, iteration);
@@ -729,8 +736,7 @@ static void fractal2(RigidBody *object, int iteration)
 		object->drawRigidBody(inv(g_eyeRbt));
 		// Recursive Call
 		iteration++;
-		int randNum = rand() % 2;
-		if (randNum)
+		if (g_fractalPattern[iteration])
 			fractal1(object, iteration);
 		else
 			fractal2(object, iteration);
@@ -1191,6 +1197,10 @@ void MySdlApplication::keyboard()
 		{
 			g_isPopped = true;
 			g_rigidBodies[0].scale[5] = 1.5;
+
+			// Initialize fractal Pattern
+			for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
+				g_fractalPattern[i] = rand() % 2;
 		}
 	}
 	else if (KB_STATE[SDL_SCANCODE_T] && !kbPrevState[SDL_SCANCODE_T])
@@ -1273,8 +1283,8 @@ void MySdlApplication::motion(const int x, const int y)
 	}
 
 	if (g_mouseClickDown) 
-		g_rigidBodies[0].rtf = m * g_rigidBodies[0].rtf;
-		//g_eyeRbt = m * g_eyeRbt;
+		//g_rigidBodies[0].rtf = m * g_rigidBodies[0].rtf;
+		g_eyeRbt = m * g_eyeRbt;
 
 	g_mouseClickX = x;
 	g_mouseClickY = g_windowHeight - y - 1;
