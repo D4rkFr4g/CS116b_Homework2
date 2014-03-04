@@ -697,18 +697,25 @@ static void fractal1(RigidBody *object, int iteration)
 		flower(object);
 	else
 	{
+		RigTForm reference = RigTForm();
+		reference.setTranslation(object->rtf.getTranslation());
+		reference.setRotation(object->rtf.getRotation());
+
 		// Fractal function
-		object->scale *= Matrix4().makeScale(Cvec3(0.5,0.5,0.5));
+		object->scale *= Matrix4().makeScale(Cvec3(0.75,0.75,0.75));
 		object->rtf.setRotation(object->rtf.getRotation() * Quat().makeZRotation(15));
 		
-		Cvec3 temp = object->rtf.getTranslation();
+		Cvec3 temp = object->rtf.getTranslation();		
 		float xScale = object->scale[0];
 		float yScale = object->scale[5];
-		temp[0] = temp[0] - abs(xScale * 0.3); // Move a scaled amount left
-		temp[1] = temp[1] + abs(yScale * 1.0); // Move a scaled amount up
+		temp[0] = temp[0] - abs(xScale * 0.15); // Move a scaled amount -x
+		temp[1] = temp[1] + abs(yScale * 0.2); // Move a scaled amount +y
+		
 		object->rtf.setTranslation(temp);
 
-		object->drawRigidBody(inv(g_eyeRbt));
+		object->drawRigidBody(inv(g_eyeRbt) * reference * object->rtf);
+		//object->drawRigidBody(inv(g_eyeRbt));
+
 		// Recursive Call
 		iteration++;
 		if (g_fractalPattern[iteration])
@@ -1177,6 +1184,7 @@ void MySdlApplication::keyboard()
 	else if (KB_STATE[SDL_SCANCODE_O] && !kbPrevState[SDL_SCANCODE_O])
 	{
 		g_isPopped = false;
+		g_rigidBodies[0].isChildVisible = true;
 
 		Matrix4 scaleTemp = Matrix4().makeScale(Cvec3(1.0,1.045,1.0));
 		if (g_rigidBodies[0].scale[5] < 1.0)
@@ -1189,19 +1197,22 @@ void MySdlApplication::keyboard()
 	else if (KB_STATE[SDL_SCANCODE_P] && !kbPrevState[SDL_SCANCODE_P])
 	{
 		Matrix4 scaleTemp = Matrix4().makeScale(Cvec3(1.0,0.955,1.0));
-		if (g_rigidBodies[0].scale[5] > 0.5)
+		if (g_rigidBodies[0].scale[5] >= 0.5)  // Change back to > instead of >=
 			g_rigidBodies[0].scale *= scaleTemp;
 
 		// Reset if too Low
-		if (g_rigidBodies[0].scale[5] < 0.5)
+		if (g_rigidBodies[0].scale[5] <= 0.5)
 		{
 			if (!g_isPopped)
+			{
+				g_rigidBodies[0].isChildVisible = false;
 				g_isPopped = true;
+			}
 			g_rigidBodies[0].scale[5] = 0.5;
 
 			// Initialize fractal Pattern
 			for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
-				g_fractalPattern[i] = rand() % 2;
+				g_fractalPattern[i] = 1;//rand() % 2;
 		}
 	}
 	else if (KB_STATE[SDL_SCANCODE_T] && !kbPrevState[SDL_SCANCODE_T])
