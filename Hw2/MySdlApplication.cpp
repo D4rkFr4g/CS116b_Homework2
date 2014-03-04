@@ -4,7 +4,7 @@
 * File:            MySdlAppliation.cpp 
 * Purpose:         Experiment with quadrics, fractals and SDL.
 * Start date:      2/23/14 
-* Programmer:      Zane Melcho, Jason Hungerford, Cesar Iñarrea
+* Programmers:      Zane Melcho, Jason Hungerford, Cesar Iñarrea
 * 
 ****************************************************** 
 */
@@ -49,6 +49,7 @@ static const unsigned char* KB_STATE = NULL;
 static const int G_NUM_OF_OBJECTS = 2; //Number of objects to be drawn
 static const int G_NUM_OF_FRACTAL_ITERATIONS = 5;
 
+//Shaders
 static const int G_NUM_SHADERS = 6;
 static const char * const G_SHADER_FILES[G_NUM_SHADERS][2] = 
 {
@@ -135,7 +136,6 @@ struct ShaderState
 			RECEIVES:	vsfn - Vertex Shader Filename
 							fsfn - Fragement Shader Filename
 			RETURNS:		ShaderState object
-			REMARKS:		
 		*/
 
 		readAndCompileShader(program, vsfn, fsfn);
@@ -181,7 +181,6 @@ struct Geometry
 							vboLen - Length of Vertex buffer array
 							iboLen - Length of Index Buffer array
 			RETURNS:		Geometry object
-			REMARKS:		 
 		*/
 
 		this->vboLen = vboLen;
@@ -206,7 +205,6 @@ struct Geometry
 		/*	PURPOSE:		Draws an OpenGL object 
 			RECEIVES:	curSS - ShaderState to be used when drawing 
 			RETURNS:		 
-			REMARKS:		 
 		*/
 
       // Enable the attributes used by our shader
@@ -245,7 +243,6 @@ struct Geometry
 			RECEIVES:	curSS - ShaderState to be used when drawing 
 							MVM - Model View Matrix to be drawn against 
 			RETURNS:		 
-			REMARKS:		 
 		*/
 
 		Matrix4 NMVM = normalMatrix(MVM);
@@ -279,7 +276,6 @@ struct RigidBody
 		/*	PURPOSE:		Constructor for RigidBody object 
 			RECEIVES:	 
 			RETURNS:		RigidBody object 
-			REMARKS:		 
 		*/
 
 		rtf = RigTForm();
@@ -298,7 +294,6 @@ struct RigidBody
 		/*	PURPOSE:		Destructor for RigidBody object 
 			RECEIVES:	 
 			RETURNS:		 
-			REMARKS:		 
 		*/
 
 		for (int i = 0; i < numOfChildren; i++)
@@ -315,11 +310,10 @@ struct RigidBody
 			RECEIVES:	rtf_ - RigTForm for the RigidBody
 							scale_ - Matrix representing RigidBody scale
 							children_ - Pointer to an array of Child RigidBody objects
-							geom_ - Geometry type of object
+							geom_ - Geometry of object
 							color_ - Color to draw object
 							material_ - Type of shader material to draw object with
 			RETURNS:		RigidBody object 
-			REMARKS:		 
 		*/
 
 		rtf = rtf_;
@@ -383,7 +377,7 @@ struct RigidBody
 		/*	PURPOSE:		Draws the RigidBody with respect to parent Frame 
 			RECEIVES:	respectFrame_ - Parent Object frame 
 			RETURNS:		 
-			REMARKS:		Recursive Function
+			REMARKS:		Recursive Function, two branches
 		*/
 
 		const ShaderState& curSS = setupShader(material);
@@ -415,10 +409,9 @@ static RigidBody g_rigidBodies[G_NUM_OF_OBJECTS]; // Array that holds each Rigid
 /*-----------------------------------------------*/
 static void initGround() 
 {
-	/*	PURPOSE:		Buils the Generic Vertices for the ground 
+	/*	PURPOSE:		Builds the Generic Vertices for the ground 
 		RECEIVES:	
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	// A x-z plane at y = g_groundY of dimension [-g_groundSize, g_groundSize]^2
@@ -438,7 +431,6 @@ static Geometry* initCube()
 	/*	PURPOSE:		Sets up index and vertex buffers and calls geometrymaker for a cube 
 		RECEIVES:	 
 		RETURNS:		Geometry - returns Geometry object 
-		REMARKS:		 
 	*/
 
 	int ibLen, vbLen;
@@ -457,7 +449,6 @@ static Geometry* initSpheres()
 	/*	PURPOSE:		Sets up index and vertex buffers and calls geometrymaker for a sphere
 		RECEIVES:	 
 		RETURNS:		Geometry - returns Geometry object 
-		REMARKS:		 
 	*/
 
 	int slices = 20;
@@ -479,7 +470,6 @@ static Geometry* initCylinders()
 	/*	PURPOSE:		Sets up index and vertex buffers and calls geometrymaker for a cylinder
 		RECEIVES:	 
 		RETURNS:		Geometry - returns Geometry object 
-		REMARKS:		 
 	*/
 
 	float radius = 1;
@@ -537,7 +527,7 @@ static void initTextureCube()
 	/*	PURPOSE:		Creates and addes a textured cube to the array of RigidBody objects
 		RECEIVES:	
 		RETURNS:		
-		REMARKS:		
+		REMARKS:		Sets the cube to g_rigidBodies[0], overwriting anything there previously
 	*/
 
 	RigidBody *cube;
@@ -586,7 +576,7 @@ static void initEgg()
 	/*	PURPOSE:		Creates and addes a textured egg to the array of RigidBody objects
 		RECEIVES:	
 		RETURNS:		
-		REMARKS:		
+		REMARKS:		Sets the egg to g_rigidBodies[0], overwriting anything there previously
 	*/
 
 	RigidBody *egg;
@@ -632,10 +622,10 @@ static RigidBody* buildPlant()
 /*-----------------------------------------------*/
 static void initPlant()
 {
-	/*	PURPOSE:		Creates and addes a plant to the array of RigidBody objects
+	/*	PURPOSE:		Creates and adds a plant to the array of RigidBody objects
 		RECEIVES:	
 		RETURNS:		
-		REMARKS:		
+		REMARKS:		Sets the plant to g_rigidBodies[1], overwriting anything there previously
 	*/
 
 	RigidBody *plant;
@@ -737,16 +727,50 @@ static void fractal2(RigidBody *object, int iteration)
 		flower(object);
 	else
 	{
+		RigTForm reference = RigTForm();
+		reference.setTranslation(object->rtf.getTranslation());
+		reference.setRotation(object->rtf.getRotation());
+
 		// Fractal function
+		object->scale *= Matrix4().makeScale(Cvec3(0.8, 0.8, 0.8));
+		object->rtf.setRotation(object->rtf.getRotation() * Quat.makeZRotation(-20));
 
+		Cvec3 temp = object->rtf.getTranslation();
+		float xScale = object->scale[0];
+		float yScale = object->scale[5];
+		temp[0] = temp[0] + abs(xScale * 0.15); //move +x
+		temp[1] = temp[1] + abs(yScale * .2);	//move +y
 
-		object->drawRigidBody(inv(g_eyeRbt));
+		object->rtf.setTranslation(temp);
+		
+		object->drawRigidBody(inv(g_eyeRbt) * reference * object->rtf);
+
 		// Recursive Call
 		iteration++;
 		if (g_fractalPattern[iteration])
 			fractal1(object, iteration);
 		else
 			fractal2(object, iteration);
+
+		//Do it again on the other side
+
+		object->scale *= Matrix4().makeScale(Cvec3(0.95,0.95,0.95));
+		object->rtf.setRotation(object->rtf.getRotation() * Quat().makeZRotation(30));
+		
+		temp[0] = temp[0] - abs(xScale * 0.15); // Move a scaled amount -x
+		temp[1] = temp[1] + abs(yScale * 0.2); // Move a scaled amount +y
+		
+		object->rtf.setTranslation(temp);
+
+		object->drawRigidBody(inv(g_eyeRbt) * reference * object->rtf);
+		//object->drawRigidBody(inv(g_eyeRbt));
+
+		// Recursive Call
+		if (g_fractalPattern[iteration])
+			fractal1(object, iteration);
+		else
+			fractal2(object, iteration);
+
 	}
 }
 /*-----------------------------------------------*/
@@ -757,7 +781,6 @@ static void sendProjectionMatrix(const ShaderState& curSS,
 		RECEIVES:	curSS - The current ShaderState to be used for drawing
 						projMatrix - The projection matrix to be used
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	// takes a projection matrix and send to the the shaders
@@ -774,7 +797,6 @@ static void sendModelViewNormalMatrix(const ShaderState& curSS,
 						MVM -		The model view matrix to be used
 						NMVM -	The normal model view matrix to be used
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	// takes MVM and its normal matrix to the shaders
@@ -791,7 +813,6 @@ static void updateFrustFovY()
 	/*	PURPOSE:		Updates the Frustum field of view 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	if (g_windowWidth >= g_windowHeight)
@@ -810,7 +831,6 @@ static void initCamera()
 	/*	PURPOSE:		Initializes the camera position
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	Cvec3 eye = Cvec3(0.0, 2.0, 5.0);
@@ -823,7 +843,6 @@ static Matrix4 makeProjectionMatrix()
 	/*	PURPOSE:		Builds a projection matrix for the scene 
 		RECEIVES:	 
 		RETURNS:		Matrix4 - Matrix corresponding to the Projection 
-		REMARKS:		 
 	*/
 
 	return Matrix4::makeProjection(g_frustFovY,
@@ -836,7 +855,6 @@ static void initGLState()
 	/*	PURPOSE:		Initializes OpenGL 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	glClearColor((GLclampf)(128./255.), (GLclampf) (200./255.), (GLclampf) (255./255.), (GLclampf) 0.);
@@ -857,7 +875,6 @@ static void initShaders()
 	/* PURPOSE:		Initializes Shaders to be used 
 		RECEIVES:	 
 		RETURNS:     
-		REMARKS:     
 	*/
 
 	g_shaderStates.resize(G_NUM_SHADERS);
@@ -881,7 +898,6 @@ static void initGeometry()
 	/*	PURPOSE:		Initializes all Geometry objects to be drawn
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	initGround();
@@ -897,7 +913,7 @@ static void loadTexture(GLuint type, GLuint texHandle, const char *filename)
 						texHandle - OpenGL handle to texture
 						filename - texture file to load
 		RETURNS:		 
-		REMARKS:		 
+		REMARKS:		 No return value, binds the texture to texHandle
 	*/
 
 	int texWidth, texHeight;
@@ -940,7 +956,6 @@ static void loadCubeTexture(GLuint type, GLuint texHandle,
 						ppmFilename5 - Fifth face texture to load
 						ppmFilename6 - Sixth face texture to load
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	int texWidth, texHeight;
@@ -983,7 +998,7 @@ static void loadSphereNormalTexture(GLuint type, GLuint texHandle)
 		RECEIVES:	type - The type of texture
 						texHandle - OpenGL handl to texture
 		RETURNS:		 
-		REMARKS:		 
+		REMARKS:		 No return value, binds the texture to texHandle
 	*/
 
 	int width = 512, height = 512;
@@ -1021,7 +1036,6 @@ static void initTextures()
 	/*	PURPOSE:		Initializes all textures to use with OpenGL 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	g_tex0.reset(new GlTexture());
@@ -1065,7 +1079,6 @@ static void drawStuff()
 	/*	PURPOSE:		Draws all objects 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	// short hand for current shader state
@@ -1113,7 +1126,6 @@ static const ShaderState& setupShader(int material)
 	/*	PURPOSE:		Sets up Shader based on material 
 		RECEIVES:	material - enum value of shader to be used 
 		RETURNS:		curSS - ShaderState to be used to draw object
-		REMARKS:		 
 	*/
 
 	// Current Shader State
@@ -1148,7 +1160,6 @@ static void reshape(const int w, const int h)
 		RECEIVES:	w - Width of window
 						h - Height of window
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	g_windowWidth = w;
@@ -1239,7 +1250,6 @@ void MySdlApplication::mouse(SDL_MouseButtonEvent button)
 	/*	PURPOSE:		Handles MouseButton events to set mouse related variables 
 		RECEIVES:	button - MouseButtonEvent object that has current state of Mouse 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	g_mouseClickX = button.x;
@@ -1269,7 +1279,6 @@ void MySdlApplication::motion(const int x, const int y)
 		RECEIVES:	x - x position of the mouse in screen Coordinates
 						y - y position of the mouse in screen Coordinates
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	const double dx = x - g_mouseClickX;
@@ -1308,7 +1317,6 @@ void MySdlApplication::onLoop()
 	/*	PURPOSE:		Handles function calls that need to run once per SDL loop 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	// Logic goes here
@@ -1320,7 +1328,6 @@ void MySdlApplication::onRender()
 	/*	PURPOSE:		Handles all graphics related calls once per SDL loop 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	// All draw calls go here
@@ -1338,7 +1345,6 @@ int MySdlApplication::onExecute()
 	/*	PURPOSE:		Main function loop of MySdlApplication 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	srand((unsigned int) time(NULL));
@@ -1370,7 +1376,6 @@ bool MySdlApplication::onInit()
 	/*	PURPOSE:		Initializes SDL 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 	
 	if(SDL_Init(SDL_INIT_EVERYTHING) < 0) 
@@ -1436,7 +1441,6 @@ void MySdlApplication::onEvent(SDL_Event* event)
 	/*	PURPOSE:		Handles SDL events 
 		RECEIVES:	event - SDL Event to be handled 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	Uint32 type = event->type;
@@ -1459,7 +1463,6 @@ void MySdlApplication::onCleanup()
 	/*	PURPOSE:		Everything to be done before program closes 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	SDL_Quit();
@@ -1470,7 +1473,6 @@ MySdlApplication::MySdlApplication()
 	/*	PURPOSE:		Constructor for MySdlApplication 
 		RECEIVES:	 
 		RETURNS:		 
-		REMARKS:		 
 	*/
 
 	running = true;
@@ -1482,36 +1484,8 @@ int main(int argc, const char* argv[])
 		RECEIVES:	argc - number of arguments passed
 						argv - array of arguments
 		RETURNS:		int - Whether or not program ran sucessfully
-		REMARKS:		
 	*/
 
 	MySdlApplication application;
 	return application.onExecute();
 }
-
-//Coding Guidelines template (REMOVE before Submission)
-
-/****************************************************** 
-* Copyright (c):   1994, All Rights Reserved. 
-* Project:         CS 46A Homework #4 
-* File:            sortcomp.cpp 
-* Purpose:         compare timings for sort routines 
-* Start date:      4/2/97 
-* Programmer:      John Chen 
-* 
-****************************************************** 
-*/
-
-
-/*-----------------------------------------------*/
-
-
-
-	/*	PURPOSE:		What does this function do? (must be present) 
-		RECEIVES:	List every argument name and explain each argument. 
-						(omit if the function has no arguments) 
-		RETURNS:		Explain the value returned by the function. 
-						(omit if the function returns no value) 
-		REMARKS:		Explain any special preconditions or postconditions. 
-						See example below. (omit if function is unremarkable) 
-	*/
