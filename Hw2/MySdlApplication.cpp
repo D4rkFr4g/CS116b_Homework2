@@ -1283,18 +1283,19 @@ void MySdlApplication::keyboard()
 		// Reset if too Low
 		if (g_rigidBodies[0].scale[5] <= 0.5)
 		{
+			g_rigidBodies[0].scale[5] = 0.5;
+
 			if (!g_isPopped)
 			{
 				g_rigidBodies[0].isChildVisible = false;
 				g_isPopped = true;
-			}
-			g_rigidBodies[0].scale[5] = 0.5;
-
-			// Initialize fractal Pattern
-			for (int j = 0; j < 3; j++)
-			{
-				for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
-					g_fractalPattern[j][i] = rand() % 2;
+			
+				// Initialize fractal Pattern
+				for (int j = 0; j < 3; j++)
+				{
+					for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
+						g_fractalPattern[j][i] = rand() % 2;
+				}
 			}
 		}
 	}
