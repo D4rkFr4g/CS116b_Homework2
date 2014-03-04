@@ -35,8 +35,8 @@ using namespace tr1;
 struct RigidBody;
 struct ShaderState;
 static const ShaderState& setupShader(int material);
-static void fractal1(RigidBody *object, int iteration, RigTForm reference);
-static void fractal2(RigidBody *object, int iteration, RigTForm reference);
+static void fractal1(RigidBody *object, int cycle, int iteration, RigTForm reference);
+static void fractal2(RigidBody *object, int cycle, int iteration, RigTForm reference);
 
 // Enum
 enum {DIFFUSE, SOLID, TEXTURE, NORMAL, ANISOTROPY, CUBE, FLOWER};
@@ -87,7 +87,7 @@ static bool g_mouseLClickButton, g_mouseRClickButton, g_mouseMClickButton;
 static int g_mouseClickX, g_mouseClickY; // coordinates for mouse click event
 static int g_activeShader = 0;
 static bool g_isPopped = false;
-int g_fractalPattern[G_NUM_OF_FRACTAL_ITERATIONS] = {0};
+int g_fractalPattern[3][G_NUM_OF_FRACTAL_ITERATIONS] = {0};
 
 static float g_frustFovY = G_FRUST_MIN_FOV; // FOV in y direction
 
@@ -719,19 +719,23 @@ static void fractalize(RigidBody *object)
 	object->drawRigidBody(inv(g_eyeRbt));
 
 	// Start Fractal Recursion
-	int iteration = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		int iteration = 0;
 
-	if (g_fractalPattern[iteration])
-		fractal1(object, iteration, inv(g_eyeRbt));
-	else
-		fractal2(object, iteration, inv(g_eyeRbt));
+		if (g_fractalPattern[i][iteration])
+			fractal1(object, i, iteration, inv(g_eyeRbt));
+		else
+			fractal2(object, i, iteration, inv(g_eyeRbt));
 
-	// Reset RigidBody Object
-	object->rtf = tempRTF;
-	object->scale = tempScale;
+		// Reset RigidBody Object
+		object->rtf = tempRTF;
+		object->scale = tempScale;
+	}
 	object->isChildVisible = false;
 }
-static void fractal1(RigidBody *object, int iteration, RigTForm reference)
+/*-----------------------------------------------*/
+static void fractal1(RigidBody *object, int cycle, int iteration, RigTForm reference)
 {
 	/*	PURPOSE:		Draws a RigidBody object in a fractal pattern
 		RECEIVES:	object - A RigidBody to be used in the fractal
@@ -747,10 +751,11 @@ static void fractal1(RigidBody *object, int iteration, RigTForm reference)
 		reference = reference * object->rtf;
 
 		// Fractal function
-		Cvec3 temp = object->rtf.getTranslation();		
+		//Cvec3 temp = object->rtf.getTranslation();		
+		Cvec3 temp = Cvec3(0,0,0);
 		float xScale = object->scale[0];
 		float yScale = object->scale[5];
-		temp[0] = -abs(xScale * 0.3); // Move a scaled amount -x
+		//temp[0] = -abs(xScale * 0.3); // Move a scaled amount -x
 		temp[1] = abs(yScale * 0.8); // Move a scaled amount +y
 		object->rtf.setTranslation(temp);
 		
@@ -762,13 +767,14 @@ static void fractal1(RigidBody *object, int iteration, RigTForm reference)
 
 		// Recursive Call
 		iteration++;
-		if (g_fractalPattern[iteration])
-			fractal1(object, iteration, reference);
+		if (g_fractalPattern[cycle][iteration])
+			fractal1(object, cycle, iteration, reference);
 		else
-			fractal2(object, iteration, reference);
+			fractal2(object, cycle, iteration, reference);
 	}
 }
-static void fractal2(RigidBody *object, int iteration, RigTForm reference)
+/*-----------------------------------------------*/
+static void fractal2(RigidBody *object, int cycle, int iteration, RigTForm reference)
 {
 	/*	PURPOSE:		Draws a RigidBody object in a fractal pattern
 		RECEIVES:	object - A RigidBody to be used in the fractal
@@ -784,10 +790,11 @@ static void fractal2(RigidBody *object, int iteration, RigTForm reference)
 		reference = reference * object->rtf;
 
 		// Fractal function
-		Cvec3 temp = object->rtf.getTranslation();		
+		//Cvec3 temp = object->rtf.getTranslation();		
+		Cvec3 temp = Cvec3(0,0,0);		
 		float xScale = object->scale[0];
 		float yScale = object->scale[5];
-		temp[0] = abs(xScale * 0.3); // Move a scaled amount -x
+		//temp[0] = abs(xScale * 0.3); // Move a scaled amount -x
 		temp[1] = abs(yScale * 0.8); // Move a scaled amount +y
 		object->rtf.setTranslation(temp);
 		
@@ -799,10 +806,10 @@ static void fractal2(RigidBody *object, int iteration, RigTForm reference)
 
 		// Recursive Call
 		iteration++;
-		if (g_fractalPattern[iteration])
-			fractal1(object, iteration, reference);
+		if (g_fractalPattern[cycle][iteration])
+			fractal1(object, cycle, iteration, reference);
 		else
-			fractal2(object, iteration, reference);
+			fractal2(object, cycle, iteration, reference);
 	}
 }
 /*-----------------------------------------------*/
@@ -1284,8 +1291,11 @@ void MySdlApplication::keyboard()
 			g_rigidBodies[0].scale[5] = 0.5;
 
 			// Initialize fractal Pattern
-			for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
-				g_fractalPattern[i] = rand() % 2;
+			for (int j = 0; j < 3; j++)
+			{
+				for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
+					g_fractalPattern[j][i] = rand() % 2;
+			}
 		}
 	}
 	else if (KB_STATE[SDL_SCANCODE_T] && !kbPrevState[SDL_SCANCODE_T])

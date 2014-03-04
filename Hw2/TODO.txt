@@ -10,7 +10,7 @@ the same height.
 Done - View your sphere as a kind of jack-in-the-box. Hitting the p key repeatedly, scales the y-axis of 
 the sphere, making it more and more of an ellipsoid, until when sy=0.5, it "pops". 
 
-- At this point, a fractal generated plant should appear on top of the sphere. The stem of this plant 
+Done - At this point, a fractal generated plant should appear on top of the sphere. The stem of this plant 
 should make use of a statistically self-similar fractal. Iterated a fixed number of times, at the last 
 step we replace initiator for that step with a flower or nothing with a fixed probability. 
 
@@ -31,6 +31,6 @@ Done - Texture read from a png file (1pt) and applied to sphere (1pt)	2pts
 Done - l,r, keys operate as described (0.5pts each) 1 pt
 Done - o, p keys operate as described (0.5pts each)	1pt
 
-Fractal flower drawn when ellipsoid "pops" (1pt). Has flowers as described (1pt).	2pts
+Done - Fractal flower drawn when ellipsoid "pops" (1pt). Has flowers as described (1pt).	2pts
 =================
 Total	10pts
