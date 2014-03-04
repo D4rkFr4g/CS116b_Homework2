@@ -88,5 +88,11 @@
     <None Include="TODO.txt">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="Shaders\flower-gl2.fshader">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\flower-gl3.fshader">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

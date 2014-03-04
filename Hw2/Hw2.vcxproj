@@ -90,6 +90,8 @@
     <None Include="Shaders\basic-gl3.vshader" />
     <None Include="Shaders\cube-gl2.fshader" />
     <None Include="Shaders\cube-gl3.fshader" />
+    <None Include="Shaders\flower-gl2.fshader" />
+    <None Include="Shaders\flower-gl3.fshader" />
     <None Include="Shaders\normal-gl2.fshader" />
     <None Include="Shaders\normal-gl3.fshader" />
     <None Include="Shaders\texture-gl2.fshader" />

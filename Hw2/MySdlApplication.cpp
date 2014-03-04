@@ -35,11 +35,11 @@ using namespace tr1;
 struct RigidBody;
 struct ShaderState;
 static const ShaderState& setupShader(int material);
-static void fractal1(RigidBody *object, int iteration);
-static void fractal2(RigidBody *object, int iteration);
+static void fractal1(RigidBody *object, int iteration, RigTForm reference);
+static void fractal2(RigidBody *object, int iteration, RigTForm reference);
 
 // Enum
-enum {DIFFUSE, SOLID, TEXTURE, NORMAL, ANISOTROPY, CUBE};
+enum {DIFFUSE, SOLID, TEXTURE, NORMAL, ANISOTROPY, CUBE, FLOWER};
 
 // Constants
 static const float G_CAM_ROTATION = 1;
@@ -47,9 +47,9 @@ static const bool G_GL2_COMPATIBLE = false;
 static const float G_FRUST_MIN_FOV = 60.0;  //A minimal of 60 degree field of view
 static const unsigned char* KB_STATE = NULL;
 static const int G_NUM_OF_OBJECTS = 2; //Number of objects to be drawn
-static const int G_NUM_OF_FRACTAL_ITERATIONS = 5;
+static const int G_NUM_OF_FRACTAL_ITERATIONS = 10;
 
-static const int G_NUM_SHADERS = 6;
+static const int G_NUM_SHADERS = 7;
 static const char * const G_SHADER_FILES[G_NUM_SHADERS][2] = 
 {
 	{"./Shaders/basic-gl3.vshader", "./Shaders/diffuse-gl3.fshader"},
@@ -57,7 +57,8 @@ static const char * const G_SHADER_FILES[G_NUM_SHADERS][2] =
    {"./Shaders/basic-gl3.vshader", "./Shaders/texture-gl3.fshader"},
    {"./Shaders/basic-gl3.vshader", "./Shaders/normal-gl3.fshader"},
 	{"./Shaders/basic-gl3.vshader", "./Shaders/anisotropy-gl3.fshader"},
-	{"./Shaders/basic-gl3.vshader", "./Shaders/cube-gl3.fshader"}
+	{"./Shaders/basic-gl3.vshader", "./Shaders/cube-gl3.fshader"},
+	{"./Shaders/basic-gl3.vshader", "./Shaders/flower-gl3.fshader"}
 
 };
 static const char * const G_SHADER_FILES_GL2[G_NUM_SHADERS][2] = 
@@ -67,7 +68,8 @@ static const char * const G_SHADER_FILES_GL2[G_NUM_SHADERS][2] =
    {"./Shaders/basic-gl2.vshader", "./Shaders/texture-gl2.fshader"},
    {"./Shaders/basic-gl2.vshader", "./Shaders/normal-gl2.fshader"},
 	{"./Shaders/basic-gl2.vshader", "./Shaders/anisotropy-gl2.fshader"},
-	{"./Shaders/basic-gl2.vshader", "./Shaders/cube-gl2.fshader"}
+	{"./Shaders/basic-gl2.vshader", "./Shaders/cube-gl2.fshader"},
+	{"./Shaders/basic-gl2.vshader", "./Shaders/flower-gl2.fshader"}
 };
 
 static const float G_FRUST_NEAR = -0.1f;    // near plane
@@ -127,6 +129,7 @@ struct ShaderState
 	GLint h_aTangent;
 	GLint h_aTexCoord0;
 	GLint h_aTexCoord1;
+	GLint h_aTexCoord2;
 
 	/*-----------------------------------------------*/
 	ShaderState(const char* vsfn, const char* fsfn) 
@@ -159,6 +162,7 @@ struct ShaderState
 		h_aTangent = safe_glGetAttribLocation(h, "aTangent");
 		h_aTexCoord0 = safe_glGetAttribLocation(h, "aTexCoord0");
 		h_aTexCoord1 = safe_glGetAttribLocation(h, "aTexCoord1");
+		h_aTexCoord2 = safe_glGetAttribLocation(h, "aTexCoord2");
 
 		if (!G_GL2_COMPATIBLE)
 			glBindFragDataLocation(h, 0, "fragColor");
@@ -214,6 +218,7 @@ struct Geometry
 		safe_glEnableVertexAttribArray(curSS.h_aNormal);
 		safe_glEnableVertexAttribArray(curSS.h_aTexCoord0);
 		safe_glEnableVertexAttribArray(curSS.h_aTexCoord1);
+		safe_glEnableVertexAttribArray(curSS.h_aTexCoord2);
 
 		// bind vbo
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -226,6 +231,8 @@ struct Geometry
 				sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
 		safe_glVertexAttribPointer(curSS.h_aTexCoord1, 2, GL_FLOAT, GL_FALSE,
 				sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
+		safe_glVertexAttribPointer(curSS.h_aTexCoord2, 2, GL_FLOAT, GL_FALSE,
+				sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
 		// bind ibo
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 
@@ -237,6 +244,7 @@ struct Geometry
 		safe_glDisableVertexAttribArray(curSS.h_aNormal);
 		safe_glDisableVertexAttribArray(curSS.h_aTexCoord0);
 		safe_glDisableVertexAttribArray(curSS.h_aTexCoord1);
+		safe_glDisableVertexAttribArray(curSS.h_aTexCoord2);
     }
 	/*-----------------------------------------------*/
 	void draw(const ShaderState& curSS, Matrix4 MVM)
@@ -412,6 +420,7 @@ static vector<shared_ptr<ShaderState> > g_shaderStates;
 // Vertex buffer and index buffer associated with the ground and cube geometry
 static shared_ptr<Geometry> g_ground, g_cube, g_sphere, g_triangle;
 static RigidBody g_rigidBodies[G_NUM_OF_OBJECTS]; // Array that holds each Rigid Body Object
+static RigidBody g_flower;
 /*-----------------------------------------------*/
 static void initGround() 
 {
@@ -466,7 +475,7 @@ static Geometry* initSpheres()
 	int ibLen, vbLen;
 	getSphereVbIbLen(slices, stacks, vbLen, ibLen);
 
-	// Temporary storage for cube geometry
+	// Temporary storage for Sphere geometry
 	vector<GenericVertex> vtx(vbLen);
 	vector<unsigned short> idx(ibLen);
 
@@ -488,11 +497,30 @@ static Geometry* initCylinders()
 	int ibLen, vbLen;
 	getCylinderVbIbLen(slices, vbLen, ibLen);
 
-	// Temporary storage for cube geometry
+	// Temporary storage for Cylinder geometry
 	vector<GenericVertex> vtx(vbLen);
 	vector<unsigned short> idx(ibLen);
 
 	makeCylinder(slices, radius, height, vtx.begin(), idx.begin());
+	return new Geometry(&vtx[0], &idx[0], vbLen, ibLen);
+}
+/*-----------------------------------------------*/
+static Geometry* initPlane()
+{
+	/*	PURPOSE:		Sets up index and vertex buffers and calls geometrymaker for a plane 
+		RECEIVES:	 
+		RETURNS:		Geometry - returns Geometry object 
+		REMARKS:		 
+	*/
+
+	int ibLen, vbLen;
+	getPlaneVbIbLen(vbLen, ibLen);
+
+	// Temporary storage for plane geometry
+	vector<GenericVertex> vtx(vbLen);
+	vector<unsigned short> idx(ibLen);
+
+	makePlane(1, vtx.begin(), idx.begin());
 	return new Geometry(&vtx[0], &idx[0], vbLen, ibLen);
 }
 /*-----------------------------------------------*/
@@ -627,7 +655,6 @@ static RigidBody* buildPlant()
 	container->children[0] = plant;
 
 	return container;
-
 }
 /*-----------------------------------------------*/
 static void initPlant()
@@ -644,7 +671,7 @@ static void initPlant()
 	g_rigidBodies[1] = *plant;
 }
 /*-----------------------------------------------*/
-static void flower(RigidBody* object)
+static void flower(RigidBody* object, RigTForm reference)
 {
 	/*	PURPOSE:		Draws a flower texture at position of object
 		RECEIVES:	object - A RigidBody to be used for coordinates
@@ -653,6 +680,26 @@ static void flower(RigidBody* object)
 	*/
 
 	// Draw a plane and put a flower texture on it.
+	float width = .4;
+	float height = .4;
+	float thick = .4;
+
+	RigTForm rigTemp = RigTForm(Cvec3(0, 0, .02));
+	Matrix4 scaleTemp = Matrix4();
+
+	// Make flower
+	//rigTemp = RigTForm(Cvec3(0, 0, 0));
+	scaleTemp = Matrix4::makeScale(Cvec3(width, height, thick));	
+
+	RigidBody *flower = new RigidBody(rigTemp, scaleTemp, NULL, initPlane(), Cvec3(1,1,1), FLOWER);
+	flower->name = "flower";
+
+	flower->rtf.setRotation(Quat().makeXRotation(45));
+
+	glBlendFunc(GL_SRC_ALPHA, GL_DST_ALPHA);
+	glEnable(GL_BLEND);
+	flower->drawRigidBody(reference * flower->rtf);
+	glDisable(GL_BLEND);
 }
 /*-----------------------------------------------*/
 static void fractalize(RigidBody *object)
@@ -675,16 +722,16 @@ static void fractalize(RigidBody *object)
 	int iteration = 0;
 
 	if (g_fractalPattern[iteration])
-		fractal1(object, iteration);
+		fractal1(object, iteration, inv(g_eyeRbt));
 	else
-		fractal2(object, iteration);
+		fractal2(object, iteration, inv(g_eyeRbt));
 
 	// Reset RigidBody Object
 	object->rtf = tempRTF;
 	object->scale = tempScale;
 	object->isChildVisible = false;
 }
-static void fractal1(RigidBody *object, int iteration)
+static void fractal1(RigidBody *object, int iteration, RigTForm reference)
 {
 	/*	PURPOSE:		Draws a RigidBody object in a fractal pattern
 		RECEIVES:	object - A RigidBody to be used in the fractal
@@ -694,37 +741,34 @@ static void fractal1(RigidBody *object, int iteration)
 	*/
 
 	if (iteration >= G_NUM_OF_FRACTAL_ITERATIONS)
-		flower(object);
+		flower(object, reference);
 	else
 	{
-		RigTForm reference = RigTForm();
-		reference.setTranslation(object->rtf.getTranslation());
-		reference.setRotation(object->rtf.getRotation());
+		reference = reference * object->rtf;
 
 		// Fractal function
-		object->scale *= Matrix4().makeScale(Cvec3(0.75,0.75,0.75));
-		object->rtf.setRotation(object->rtf.getRotation() * Quat().makeZRotation(15));
-		
 		Cvec3 temp = object->rtf.getTranslation();		
 		float xScale = object->scale[0];
 		float yScale = object->scale[5];
-		temp[0] = temp[0] - abs(xScale * 0.15); // Move a scaled amount -x
-		temp[1] = temp[1] + abs(yScale * 0.2); // Move a scaled amount +y
-		
+		temp[0] = -abs(xScale * 0.3); // Move a scaled amount -x
+		temp[1] = abs(yScale * 0.8); // Move a scaled amount +y
 		object->rtf.setTranslation(temp);
-
-		object->drawRigidBody(inv(g_eyeRbt) * reference * object->rtf);
-		//object->drawRigidBody(inv(g_eyeRbt));
+		
+		object->scale *= Matrix4().makeScale(Cvec3(0.75,0.75,0.75));
+		float scaledRotation = 30 * xScale;
+		object->rtf.setRotation(object->rtf.getRotation() * Quat().makeZRotation(scaledRotation));
+		
+		object->drawRigidBody(reference);
 
 		// Recursive Call
 		iteration++;
 		if (g_fractalPattern[iteration])
-			fractal1(object, iteration);
+			fractal1(object, iteration, reference);
 		else
-			fractal2(object, iteration);
+			fractal2(object, iteration, reference);
 	}
 }
-static void fractal2(RigidBody *object, int iteration)
+static void fractal2(RigidBody *object, int iteration, RigTForm reference)
 {
 	/*	PURPOSE:		Draws a RigidBody object in a fractal pattern
 		RECEIVES:	object - A RigidBody to be used in the fractal
@@ -734,19 +778,31 @@ static void fractal2(RigidBody *object, int iteration)
 	*/
 
 	if (iteration >= G_NUM_OF_FRACTAL_ITERATIONS)
-		flower(object);
+		flower(object, reference);
 	else
 	{
+		reference = reference * object->rtf;
+
 		// Fractal function
+		Cvec3 temp = object->rtf.getTranslation();		
+		float xScale = object->scale[0];
+		float yScale = object->scale[5];
+		temp[0] = abs(xScale * 0.3); // Move a scaled amount -x
+		temp[1] = abs(yScale * 0.8); // Move a scaled amount +y
+		object->rtf.setTranslation(temp);
+		
+		object->scale *= Matrix4().makeScale(Cvec3(0.75,0.75,0.75));
+		float scaledRotation = 360 - (30 * xScale);
+		object->rtf.setRotation(object->rtf.getRotation() * Quat().makeZRotation(scaledRotation));
+		
+		object->drawRigidBody(reference);
 
-
-		object->drawRigidBody(inv(g_eyeRbt));
 		// Recursive Call
 		iteration++;
 		if (g_fractalPattern[iteration])
-			fractal1(object, iteration);
+			fractal1(object, iteration, reference);
 		else
-			fractal2(object, iteration);
+			fractal2(object, iteration, reference);
 	}
 }
 /*-----------------------------------------------*/
@@ -1045,7 +1101,8 @@ static void initTextures()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    
+   
+	/*
 	g_tex2.reset(new GlTexture());
     
 	loadCubeTexture(GL_TEXTURE2, *g_tex2, "./Images/one.ppm", "./Images/two.ppm",
@@ -1058,6 +1115,18 @@ static void initTextures()
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+	*/
+
+	g_tex2.reset(new GlTexture());
+
+	loadTexture(GL_TEXTURE2, *g_tex2, "./Images/flower.png");
+
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, *g_tex2);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 }
 /*-----------------------------------------------*/
 static void drawStuff()
@@ -1119,6 +1188,10 @@ static const ShaderState& setupShader(int material)
 	// Current Shader State
 	glUseProgram(g_shaderStates[material]->program);
 	const ShaderState& curSS = *g_shaderStates[material];
+
+	safe_glUniform1i(curSS.h_uTexUnit0, 0);
+	safe_glUniform1i(curSS.h_uTexUnit1, 1);
+   safe_glUniform1i(curSS.h_uTexUnit2, 2);
 
 	// Build & send proj. matrix to vshader
 	const Matrix4 projmat = makeProjectionMatrix();
@@ -1212,7 +1285,7 @@ void MySdlApplication::keyboard()
 
 			// Initialize fractal Pattern
 			for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
-				g_fractalPattern[i] = 1;//rand() % 2;
+				g_fractalPattern[i] = rand() % 2;
 		}
 	}
 	else if (KB_STATE[SDL_SCANCODE_T] && !kbPrevState[SDL_SCANCODE_T])
@@ -1231,6 +1304,11 @@ void MySdlApplication::keyboard()
 			g_rigidBodies[0].isChildVisible = false;
 		else
 			g_rigidBodies[0].isChildVisible = true;
+	}
+	else if (KB_STATE[SDL_SCANCODE_0] && !kbPrevState[SDL_SCANCODE_0])
+	{
+		// Cheat button // Remove when done.
+		g_rigidBodies[0].scale[5] = 0.5;
 	}
 }
 /*-----------------------------------------------*/
