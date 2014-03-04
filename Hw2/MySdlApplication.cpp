@@ -88,6 +88,7 @@ static int g_mouseClickX, g_mouseClickY; // coordinates for mouse click event
 static int g_activeShader = 0;
 static bool g_isPopped = false;
 int g_fractalPattern[3][G_NUM_OF_FRACTAL_ITERATIONS] = {0};
+int g_flowerPattern[3] = {0};
 
 static float g_frustFovY = G_FRUST_MIN_FOV; // FOV in y direction
 
@@ -671,7 +672,7 @@ static void initPlant()
 	g_rigidBodies[1] = *plant;
 }
 /*-----------------------------------------------*/
-static void flower(RigidBody* object, RigTForm reference)
+static void flower(RigidBody* object, int cycle, RigTForm reference)
 {
 	/*	PURPOSE:		Draws a flower texture at position of object
 		RECEIVES:	object - A RigidBody to be used for coordinates
@@ -679,27 +680,30 @@ static void flower(RigidBody* object, RigTForm reference)
 		REMARKS:		Recursive end function
 	*/
 
-	// Draw a plane and put a flower texture on it.
-	float width = .4;
-	float height = .4;
-	float thick = .4;
+	if (g_flowerPattern[cycle])
+	{
+		// Draw a plane and put a flower texture on it.
+		float width = .4;
+		float height = .4;
+		float thick = .4;
 
-	RigTForm rigTemp = RigTForm(Cvec3(0, 0, .02));
-	Matrix4 scaleTemp = Matrix4();
+		RigTForm rigTemp = RigTForm(Cvec3(0, 0, .02));
+		Matrix4 scaleTemp = Matrix4();
 
-	// Make flower
-	//rigTemp = RigTForm(Cvec3(0, 0, 0));
-	scaleTemp = Matrix4::makeScale(Cvec3(width, height, thick));	
+		// Make flower
+		//rigTemp = RigTForm(Cvec3(0, 0, 0));
+		scaleTemp = Matrix4::makeScale(Cvec3(width, height, thick));	
 
-	RigidBody *flower = new RigidBody(rigTemp, scaleTemp, NULL, initPlane(), Cvec3(1,1,1), FLOWER);
-	flower->name = "flower";
+		RigidBody *flower = new RigidBody(rigTemp, scaleTemp, NULL, initPlane(), Cvec3(1,1,1), FLOWER);
+		flower->name = "flower";
 
-	flower->rtf.setRotation(Quat().makeXRotation(45));
+		flower->rtf.setRotation(Quat().makeXRotation(45));
 
-	glBlendFunc(GL_SRC_ALPHA, GL_DST_ALPHA);
-	glEnable(GL_BLEND);
-	flower->drawRigidBody(reference * flower->rtf);
-	glDisable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_DST_ALPHA);
+		glEnable(GL_BLEND);
+		flower->drawRigidBody(reference * flower->rtf);
+		glDisable(GL_BLEND);
+	}
 }
 /*-----------------------------------------------*/
 static void fractalize(RigidBody *object)
@@ -745,7 +749,7 @@ static void fractal1(RigidBody *object, int cycle, int iteration, RigTForm refer
 	*/
 
 	if (iteration >= G_NUM_OF_FRACTAL_ITERATIONS)
-		flower(object, reference);
+		flower(object, cycle, reference);
 	else
 	{
 		reference = reference * object->rtf;
@@ -784,7 +788,7 @@ static void fractal2(RigidBody *object, int cycle, int iteration, RigTForm refer
 	*/
 
 	if (iteration >= G_NUM_OF_FRACTAL_ITERATIONS)
-		flower(object, reference);
+		flower(object, cycle, reference);
 	else
 	{
 		reference = reference * object->rtf;
@@ -1293,6 +1297,8 @@ void MySdlApplication::keyboard()
 				// Initialize fractal Pattern
 				for (int j = 0; j < 3; j++)
 				{
+					g_flowerPattern[j] = rand() % 2;
+
 					for (int i = 0; i < G_NUM_OF_FRACTAL_ITERATIONS; i++)
 						g_fractalPattern[j][i] = rand() % 2;
 				}
